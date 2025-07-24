@@ -107,7 +107,7 @@ def start_gemini_chat_session(api_key_source, initial_history=None):
     """
     try:
         _configure_gemini(api_key_source) # Use the new _configure_gemini
-        model = genai.GenerativeModel('gemini-pro') # Chat usually uses a consistent model
+        model = genai.GenerativeModel('gemini-2.5-flash') # Chat usually uses a consistent model
 
         parsed_history = []
         if initial_history:

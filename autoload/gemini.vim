@@ -18,6 +18,12 @@ if !exists('g:gemini_chat_buffers')
     let g:gemini_chat_buffers = {} " dict: full_session_id -> bufnr
 endif
 
+if !hlexists('GeminiPopupNormal')
+  highlight GeminiPopupNormal guifg=#dcdccc guibg=#2e2e2e ctermfg=LightGray ctermbg=Black
+  highlight GeminiPopupBorder guifg=#5f7f5f guibg=#2e2e2e ctermfg=Green ctermbg=Black
+endif
+
+
 " ============================================================================
 " Python Interface Helpers
 " ============================================================================
@@ -81,7 +87,7 @@ function! s:display_in_new_buffer(content, filetype_arg) abort
         echo "No content to display."
         return
     endif
-    new
+    vnew
     setlocal buftype=nofile nobuflisted bufhidden=delete noswapfile
     exe 'setlocal filetype=' . a:filetype_arg
     call append(0, split(a:content, "\n"))
@@ -184,31 +190,69 @@ endfunction
 " ============================================================================
 " Chat Session Functions
 " ============================================================================
+" autoload/gemini.vim (MODIFIED FOR DEBUGGING s:get_chat_buffer)
+" autoload/gemini.vim (FINAL s:get_chat_buffer fix)
+" autoload/gemini.vim (FINAL s:get_chat_buffer fix - removing nobuflisted)
 
-" Helper to get/create a chat buffer for a given session ID.
+" autoload/gemini.vim (Final s:get_chat_buffer fix - minimal options)
+
 function! s:get_chat_buffer(session_id, create_if_not_exists) abort
+    " echo "DEBUG: s:get_chat_buffer called with session_id=" . a:session_id . ", create_if_not_exists=" . a:create_if_not_exists
+
     " Check if buffer for this session ID already exists and is listed
     if has_key(g:gemini_chat_buffers, a:session_id) && buflisted(g:gemini_chat_buffers[a:session_id])
+        " echo "DEBUG: Found existing listed buffer: " . g:gemini_chat_buffers[a:session_id]
         return g:gemini_chat_buffers[a:session_id]
     endif
 
     " If not found, create if requested
     if a:create_if_not_exists
         let l:bufname = '[Gemini Chat] ' . a:session_id[:7] " Use a prefix for buffer name
-        exe 'silent! keepjumps sbuffer ' . l:bufname
-        let l:bufnr = bufnr(l:bufname)
-        " Set buffer options for a scratch buffer
-        call setbufvar(l:bufnr, '&buftype', 'nofile')
-        call setbufvar(l:bufnr, '&nobuflisted', 1)
-        call setbufvar(l:bufnr, '&bufhidden', 'delete')
-        call setbufvar(l:bufnr, '&noswapfile', 1)
-        call setbufvar(l:bufnr, '&filetype', 'markdown') " Markdown for chat formatting
-        " Store session ID in buffer-local variable for context
-        call setbufvar(l:bufnr, 'gemini_session_id', a:session_id)
-        " Store bufnr in global map
-        let g:gemini_chat_buffers[a:session_id] = l:bufnr
-        return l:bufnr
+        " echo "DEBUG: Attempting to create buffer with name: " . l:bufname
+        try
+            " Use :new to create an empty buffer in a new split, then :file to name it.
+            " This is often more robust for new scratch buffers.
+            exe 'silent! keepjumps new'
+            exe 'silent! file ' . l:bufname
+
+            let l:bufnr = bufnr(l:bufname)
+            " echo "DEBUG: bufnr after new/file(" . l:bufname . "): " . l:bufnr
+            " echo "DEBUG: Current bufnr: " . bufnr('%') . ", name: " . bufname('%')
+
+            if l:bufnr == -1
+                " echo "DEBUG: bufnr is -1. Buffer creation/lookup failed."
+                " If it's still -1, try current bufnr as fallback, though it shouldn't be
+                " necessary if new/file works.
+                let l:bufnr = bufnr('%')
+                if bufname(l:bufnr) !=# l:bufname
+                    " If current buffer isn't named correctly, something went wrong.
+                    echoerr "Gemini.vim: Internal error - could not create unique chat buffer."
+                    return -1
+                endif
+            endif
+
+            " If a buffer was successfully created and identified
+            if l:bufnr != -1
+                " Set buffer options for a scratch buffer. Keeping only essential ones that should always work.
+                call setbufvar(l:bufnr, '&buftype', 'nofile')      " Marks as not a real file
+                " Removed: call setbufvar(l:bufnr, '&nobuflisted', 1)
+                call setbufvar(l:bufnr, '&bufhidden', 'delete')   " Deletes buffer when no windows show it
+                " Removed: call setbufvar(l:bufnr, '&noswapfile', 1)
+                call setbufvar(l:bufnr, '&filetype', 'markdown')  " Sets syntax highlighting
+                
+                " Store session ID in buffer-local variable for context
+                call setbufvar(l:bufnr, 'gemini_session_id', a:session_id)
+                " Store bufnr in global map
+                let g:gemini_chat_buffers[a:session_id] = l:bufnr
+                " echo "DEBUG: Successfully created and registered buffer " . l:bufnr
+                return l:bufnr
+            endif
+        catch
+            echo "DEBUG: Error during buffer creation: " . v:exception
+            let l:bufnr = -1 " Ensure bufnr is -1 on error
+        endtry
     endif
+    " echo "DEBUG: Returning -1 (buffer not found/created)."
     return -1 " Buffer not found and not created
 endfunction
 
@@ -233,6 +277,124 @@ function! gemini#StartChat() abort
     endif
 endfunction
 
+function! s:HighlightPopup(id)
+  " Define highlight groups if they don't exist
+  if !hlexists('GeminiBold')
+    highlight default GeminiBold gui=bold cterm=bold
+  endif
+  if !hlexists('GeminiHeader')
+    highlight default GeminiHeader gui=bold ctermfg=Yellow
+  endif
+
+  call win_execute(a:id, 'syntax clear GeminiBold')
+  call win_execute(a:id, 'syntax clear GeminiHeader')
+
+  call win_execute(a:id, 'syntax match GeminiBold /\*\*\zs[^*]\+\ze\*\*/')
+  call win_execute(a:id, 'syntax match GeminiHeader /^#.*$/')
+endfunction
+
+let s:all_lines = []
+let s:start_line = 0
+function! s:UpdatePopup()
+  " Extract a 20-line slice from all_lines starting at start_line
+  let slice = s:all_lines[s:start_line : s:start_line + 19]
+  call popup_settext(g:gemini_popup_id, slice)
+endfunction
+
+function! s:PopupFilter(id, key)
+  if a:key ==# 'q'
+    " Close popup and return to previous window
+    call popup_close(a:id)
+    call win_gotoid(g:previous_winid)
+    return 1
+
+  elseif a:key ==# 'j'
+    " Scroll down if more lines are below
+    if s:start_line + 20 < len(s:all_lines)
+      let s:start_line += 1
+      call s:UpdatePopup()
+    endif
+    return 1
+
+  elseif a:key ==# 'k'
+    " Scroll up if not at top
+    if s:start_line > 0
+      let s:start_line -= 1
+      call s:UpdatePopup()
+    endif
+    return 1
+  endif
+
+  return 0
+endfunction
+
+
+let s:chat_bufnr = -1
+let g:gemini_popup_id = -1
+" suggested by chatGPT
+function! s:ShowPopupResponse(text) abort
+  let s:all_lines = split(a:text, "\n")
+  let g:previous_winid = win_getid()
+  echo "s:all_lines type" .  type(s:all_lines)
+
+  " Create or reuse buffer
+  if s:chat_bufnr == -1 || !bufexists(s:chat_bufnr)
+    let s:chat_bufnr = bufnr('gemini-chat', 1)
+    call setbufvar(s:chat_bufnr, '&buftype', 'nofile')
+    call setbufvar(s:chat_bufnr, '&bufhidden', 'hide')
+    call setbufvar(s:chat_bufnr, '&swapfile', v:false)
+    call setbufvar(s:chat_bufnr, '&filetype', 'markdown')
+  endif
+
+  " Append lines
+  for line in s:all_lines
+    call appendbufline(s:chat_bufnr, '$', line)
+  endfor
+  call appendbufline(s:chat_bufnr, '$', '') " blank line
+
+  " Close old popup if visible
+  if exists('g:gemini_popup_id')
+    call popup_close(g:gemini_popup_id)
+    let g:gemini_popup_id = -1
+  endif
+  if g:gemini_popup_id == -1 || popup_getpos(g:gemini_popup_id) == {}
+      let g:gemini_popup_id = popup_create(s:all_lines, {
+          \ 'padding': [1,2,1,1],
+          \ 'pos': 'topleft',
+          \ 'line': 3,
+          \ 'col': 10,
+          \ 'maxwidth': 80,
+          \ 'minheight': 5,
+          \ 'maxheight': 20,
+          \ 'minwidth': 60,
+          \ 'zindex': 10,
+          \ 'mapping': v:true,
+          \ 'wrap': v:true,
+          \ 'scrollbar': 1,
+	      \ 'filter': function('s:PopupFilter', {}),
+          \ })
+
+    call s:HighlightPopup(g:gemini_popup_id)
+    " Jump cursor to popup window
+    call win_gotoid(g:gemini_popup_id)
+    " Map 'q' inside popup to close it and jump back to previous window
+    call win_execute(g:gemini_popup_id, printf(
+    \ 'nnoremap <buffer> q :call popup_close(%d) \| call win_gotoid(%d)<CR>',
+    \ g:gemini_popup_id, g:previous_winid))
+
+  endif
+
+  " No popup_getwin / win_execute in Vim — skip scroll-to-bottom
+endfunction
+
+function! GeminiPopupClose()
+  if g:gemini_popup_id != -1 && popup_visible(g:gemini_popup_id)
+    call popup_close(g:gemini_popup_id)
+    let g:gemini_popup_id = -1
+  endif
+endfunction
+
+
 " Command handler for :GeminiChatSend
 function! gemini#SendMessage(message_text) abort
     if empty(g:gemini_current_chat_id)
@@ -249,12 +411,17 @@ function! gemini#SendMessage(message_text) abort
 
     let l:original_buf = bufnr('%') " Store current buffer to return later
 
-    " Append user message to the active chat buffer
-    call buf_set_lines(l:bufnr, -1, -1, [
-        \ '### User:',
-        \ a:message_text,
-        \ ''
-        \ ])
+    let l:winid = bufwinnr(l:bufnr)
+    if l:winid != -1
+        " run command in that window context
+"        exe l:winid . 'wincmd w'
+        call append('$', [
+            \ '### User:',
+            \ a:message_text,
+            \ ''
+            \ ])
+    endif
+
     call setbufvar(l:bufnr, '&modified', 0) " Mark as not modified after adding user text
     
     " Go to the chat buffer and move to the end
@@ -269,12 +436,38 @@ function! gemini#SendMessage(message_text) abort
     let l:result = s:call_python_and_parse_response(l:call_string)
 
     if l:result.success
-        " Append Gemini's response to the chat buffer
-        call buf_set_lines(l:bufnr, -1, -1, [
-            \ '### Gemini:',
-            \ l:result.text,
-            \ ''
-            \ ])
+        " Save current buffer
+        let l:curbuf = bufnr('%')
+
+        " Switch to the target buffer
+        execute 'buffer' l:bufnr
+
+		" l:result is expected to be a dict with 'text' key
+        if type(l:result) == type({})
+            let l:text = get(l:result, 'text', '')
+        else
+            let l:text = string(l:result)
+        endif
+
+        call s:ShowPopupResponse('### Gemini:' . "\n" . l:text)
+
+        if type(l:result) == type({})
+            let l:text = get(l:result, 'text', '')
+        else
+            let l:text = string(l:result)
+        endif
+
+        call append('$', ['### Gemini:'])
+        call append('$', split(l:text, '\n'))
+        call append('$', [''])
+
+
+        " Optional: scroll to bottom
+        normal! G
+
+        " Return to original buffer
+        execute 'buffer' l:curbuf
+
         call setbufvar(l:bufnr, '&modified', 0)
         echo "Gemini replied in session " . g:gemini_current_chat_id[:7]
         " Ensure cursor is at the end of the chat buffer

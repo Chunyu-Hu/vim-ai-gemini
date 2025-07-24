@@ -7,6 +7,9 @@ if exists('g:loaded_gemini_plugin')
     finish
 endif
 let g:loaded_gemini_plugin = 1
+if !exists('g:gemini_popup_id')
+  let g:gemini_popup_id = -1
+endif
 
 " ============================================================================
 " Global Configuration Variables (with default values)
@@ -80,7 +83,7 @@ command! -nargs=0 GeminiChatStart call gemini#StartChat()
 " Command: :GeminiChatSend {message}
 " Sends a message to the currently active Gemini chat session.
 " The message and response are appended to the chat buffer.
-command! -nargs=* GeminiChatSend call gemini#SendMessage(<f-args>)
+command! -nargs=1 GeminiChatSend call gemini#SendMessage(<f-args>)
 
 " Command: :GeminiChatSendVisual
 " Sends the visually selected text as a message to the current chat session.
@@ -101,6 +104,8 @@ command! -nargs=1 -complete=customlist,gemini#_completion_chat_ids GeminiChatSwi
 " Command: :GeminiChatEnd {session_id_prefix}
 " Ends and closes a specific chat session and its buffer.
 command! -nargs=1 -complete=customlist,gemini#_completion_chat_ids GeminiChatEnd call gemini#EndChat(<f-args>)
+
+command! GeminiPopupClose call popup_close(g:gemini_popup_id)
 
 " ============================================================================
 " Command-Line Tab Completion Functions
