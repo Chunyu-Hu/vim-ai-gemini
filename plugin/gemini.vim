@@ -59,6 +59,11 @@ endif
 " Prompts the user for a question, sends it to Gemini, and displays response in new buffer.
 command! -nargs=* GeminiAsk call gemini#Ask(<f-args>)
 
+" Command: :GeminiAskVisual
+" Visually select code, then ask Gemini a question about it.
+" RESTORED '-range=%' for standard visual mode usage.
+command! -range=% GeminiAskVisual call gemini#AskVisual()
+
 " Command: :GeminiGenerateVisual
 " Sends the currently selected text (in visual mode) to Gemini.
 " Response is displayed in a new scratch buffer.
