@@ -125,7 +125,7 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
 
         " Set buffer options for a scratch buffer.
         setlocal buftype=nofile
-        setlocal bufhidden=hide
+        "setlocal bufhidden=hide
         exe 'setlocal filetype=' . a:filetype_arg
         
         " Store the new bufnr globally.
@@ -299,13 +299,14 @@ endfunction
 
 " Command handler for :GeminiGenerateVisual
 function! gemini#SendVisualSelection() abort range
-    let l:selected_text = join(getline(a:firstline, a:lastline), "\n")
+    let l:lastline = line("'>")
+    let l:selected_text = join(getline(a:firstline, l:lastline), "\n")
     echo "Sending selected text to Gemini..."
     let l:response = gemini#GenerateContent(l:selected_text, g:gemini_default_model)
 
     if !empty(l:response)
         " Keeping s:display_in_new_buffer for these as they are transient.
-        call s:display_in_new_buffer(l:response, 'markdown')
+        call s:update_ask_buffer("", l:response, 'markdown')
         echo "Gemini response received in new buffer."
     else
         echoerr "Gemini did not return a response."
@@ -320,7 +321,8 @@ function! gemini#SendBuffer() abort
 
     if !empty(l:response)
         " Keeping s:display_in_new_buffer for these as they are transient.
-        call s:display_in_new_buffer(l:response, 'markdown')
+        "call s:display_in_new_buffer(l:response, 'markdown')
+        call s:update_ask_buffer("", l:response, 'markdown')
         echo "Gemini response received in new buffer."
     else
         echoerr "Gemini did not return a response."
@@ -473,10 +475,10 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
             endif
         catch
             echo "DEBUG: Error during buffer creation in s:get_chat_buffer: " . v:exception
-            let l:bufnr = -1 " Ensure bufnr is -1 on error.
+            let l:bufnr = -1
         endtry
     endif
-    return -1 " Buffer not found and not created.
+    return -1
 endfunction
 
 
@@ -494,7 +496,7 @@ function! gemini#StartChat() abort
             exe 'buffer ' . l:bufnr
             " Add a welcome message.
             call append(0, ["# Gemini Chat Session " . g:gemini_current_chat_id[:7], "---", ""])
-            setlocal nomodified " Mark as not modified.
+            setlocal nomodified
         endif
     else
         echoerr "Failed to start chat: " . l:result.error
@@ -519,23 +521,26 @@ function! gemini#SendMessage(message_text) abort
 
     let l:current_win = winnr()
     let l:current_buf = bufnr('%')
-    let l:current_pos = getpos('.') " Save cursor position.
+    let l:current_pos = getpos('.')
 
     echo "Sending message to Gemini in session " . g:gemini_current_chat_id[:7] . "..."
 
     " Switch to the chat buffer.
     exe 'buffer ' . l:bufnr
-
     " Append user message lines to the list of current lines.
-    call append(line('$'), [
-        \ '### User:',
-        \ a:message_text,
-        \ '',
-        \ ])
-    
+	let l:user_lines = [
+				\ '### User:',
+				\ ]
+    let l:cleaned_user_message = substitute(a:message_text, '\x00', '', 'g')
+	call extend(l:user_lines, split(l:cleaned_user_message, "\n"))
+    " Blank line after user's prompt.
+    call add(l:user_lines, '')
+
+    call append(line('$'), l:user_lines)
+
     call s:apply_gemini_highlights() " Apply highlights after appending.
     
-    setlocal nomodified " Mark as not modified after adding user text.
+    setlocal nomodified
     
     " Go to the chat buffer and move to the end.
     normal! G
@@ -551,26 +556,24 @@ function! gemini#SendMessage(message_text) abort
                        \ l:message_text_json . ", " .
                        \ l:api_key_source_json . ")"
 
-    " --- DEBUGGING ADDITIONS (Optional for this function, but useful if chat breaks) ---
-    echo "DEBUG(SendMessage): Original message: '" . a:message_text . "'"
-    echo "DEBUG(SendMessage): Python call string (l:call_string) before py3eval: " . l:call_string
-    " --- END DEBUGGING ---
-    
     let l:result = s:call_python_and_parse_response(l:call_string)
 
     if l:result.success
-        let l:gemini_response_text = l:result.text
         " Attempt to remove NULL bytes (^@) from the response for cleaner display.
-        let l:gemini_response_text = substitute(l:gemini_response_text, '\x00', '', 'g')
-        
+        let l:gemini_response_text = substitute(l:result.text, '\x00', '', 'g')
+		" Prepare lines for Gemini's response.
+		let l:gemini_lines = [
+					\ '### Gemini:',
+					\ ]
+		call extend(l:gemini_lines, split(l:gemini_response_text, "\n"))
+
+		" Blank line after Gemini's response.
+		call add(l:gemini_lines, '')
+
         " Append Gemini's response lines to the list.
-        call append(line('$'), [
-            \ '### Gemini:',
-            \ l:gemini_response_text,
-            \ '',
-            \ ])
+        call append(line('$'), l:gemini_lines)
         
-        call s:apply_gemini_highlights() " Apply highlights after appending.
+        call s:apply_gemini_highlights()
         
         setlocal nomodified
         echo "Gemini replied in session " . g:gemini_current_chat_id[:7]
@@ -587,7 +590,8 @@ endfunction
 
 " Command handler for :GeminiChatSendVisual
 function! gemini#SendVisualSelectionToChat() abort range
-    let l:selected_text = join(getline(a:firstline, a:lastline), "\n")
+	let l:lastline = line("'>")
+    let l:selected_text = join(getline(a:firstline, l:lastline), "\n")
     call gemini#SendMessage(l:selected_text)
 endfunction
 
@@ -607,7 +611,7 @@ function! gemini#ListChats() abort
     for l:id in keys(g:gemini_chat_buffers)
         let l:bufnr = get(g:gemini_chat_buffers, l:id, -1)
         if buflisted(l:bufnr)
-            echo "  - ID: " . l:id[:7] . " (Buffer: " . bufnr2name(l:bufnr) . ")"
+            echo "  - ID: " . l:id[:7] . " (Buffer: " . bufname(l:bufnr) . ")"
         else
             echo "  - ID: " . l:id[:7] . " (Buffer: NOT ACTIVE)"
         endif
@@ -666,12 +670,12 @@ function! gemini#EndChat(session_id_prefix) abort
         if has_key(g:gemini_chat_buffers, l:full_id)
             let l:bufnr = g:gemini_chat_buffers[l:full_id]
             if buflisted(l:bufnr)
-                exe 'bdelete! ' . l:bufnr " Close and delete the buffer.
+                exe 'bdelete! ' . l:bufnr
             endif
-            call remove(g:gemini_chat_buffers, l:full_id) " Remove from global map.
+            call remove(g:gemini_chat_buffers, l:full_id)
         endif
         if g:gemini_current_chat_id ==# l:full_id
-            let g:gemini_current_chat_id = '' " Clear current session if it was the one being ended.
+            let g:gemini_current_chat_id = ''
         endif
         echo l:result.message
     else
