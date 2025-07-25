@@ -222,8 +222,7 @@ function! gemini#Ask(...) abort
     echo "Asking Gemini..."
     let l:response = gemini#GenerateContent(l:prompt, g:gemini_default_model)
 
-    if !empty(l:response)
-        " Update the Ask buffer with user's prompt and Gemini's response.
+    if !empty(l:response) " Update the Ask buffer with user's prompt and Gemini's response.
         call s:update_ask_buffer(l:prompt, l:response, 'markdown')
         echo "Gemini response received."
     else
@@ -232,13 +231,14 @@ function! gemini#Ask(...) abort
 endfunction
 
 " Command handler for :GeminiAskVisual
-function! gemini#AskVisual() abort range
-    " Save current view/cursor position to return to it later.
+function! gemini#AskVisual(...) abort range
     let l:original_win = winnr()
     let l:original_buf = bufnr('%')
     let l:original_pos = getpos('.')
-    
-    let l:selected_code = ''
+
+    let l:start_line = line("'<")
+    let l:end_line = line("'>")
+    let l:selected_code = join(getline(l:start_line, l:end_line), "\n")
 
     " Fallback to clipboard registers if unnamed is empty (e.g., another yank happened or no selection).
     if empty(l:selected_code) && has('clipboard')
@@ -253,10 +253,14 @@ function! gemini#AskVisual() abort range
         endif
     endif
 
-    " Prompt user for their specific question/instruction.
-    let l:user_prompt_text = input("Ask Gemini to (e.g., 'review for bugs'): ")
+    if a:0 > 0
+        let l:user_prompt_text = join(a:000, ' ')
+    else
+        let l:user_prompt_text = input("Ask Gemini: ")
+    endif
 
     " Exit if user cancels or provides no prompt and no code selected.
+    " Now, if l:user_prompt_text is empty, it means they didn't type anything after the command.
     if empty(l:user_prompt_text) && empty(l:selected_code)
         echo "Canceled or empty selection/prompt."
         return
