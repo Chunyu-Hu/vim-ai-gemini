@@ -18,6 +18,12 @@ if !exists('g:gemini_chat_buffers')
     let g:gemini_chat_buffers = {} " dict: full_session_id -> bufnr
 endif
 
+" Global variable to store the persistent buffer number for GeminiAsk responses
+if !exists('g:gemini_ask_display_bufnr')
+    let g:gemini_ask_display_bufnr = -1
+endif
+
+
 if !hlexists('GeminiPopupNormal')
   highlight GeminiPopupNormal guifg=#dcdccc guibg=#2e2e2e ctermfg=LightGray ctermbg=Black
   highlight GeminiPopupBorder guifg=#5f7f5f guibg=#2e2e2e ctermfg=Green ctermbg=Black
@@ -35,6 +41,43 @@ function! s:check_python_support() abort
         return 0
     endif
     return 1
+endfunction
+
+" Helper to define and apply custom highlighting
+" This function MUST be called after switching to the target buffer.
+function! s:apply_gemini_highlights() abort
+    " Define custom highlight groups if they don't exist
+    " Using default to let user's colorscheme override if desired
+    " User Prompts
+    if !hlexists('GeminiUserPrompt')
+        highlight default GeminiUserPrompt term=bold ctermfg=cyan gui=bold guifg=#00FFFF
+    endif
+    " AI Responses
+    if !hlexists('GeminiAIResponse')
+        highlight default GeminiAIResponse term=bold ctermfg=green gui=bold guifg=#00FF00
+    endif
+    " Section Headers (like ### User: / ### Gemini:)
+    if !hlexists('GeminiHeader')
+        highlight default GeminiHeader term=bold ctermfg=yellow gui=bold guifg=#FFFF00
+    endif
+
+    " Try to clear previous matches in the current buffer to avoid accumulation.
+    " Using clearmatches() which clears all matches for the current buffer.
+    if exists('*clearmatches')
+        call clearmatches()
+    " else
+    "    Optional: Add a debug message if clearmatches is not available.
+    "    echo "DEBUG: clearmatches() not available, highlights might accumulate."
+    endif
+
+    " Apply matches for the specific headers in the current buffer
+    " Match '### User:' lines
+    call matchadd('GeminiHeader', '^### User:', -1)
+    call matchadd('GeminiUserPrompt', '^### User:.*', -1)
+
+    " Match '### Gemini:' lines
+    call matchadd('GeminiHeader', '^### Gemini:', -1)
+    call matchadd('GeminiAIResponse', '^### Gemini:.*', -1)
 endfunction
 
 " Helper function to call a Python function and handle common errors.
@@ -81,6 +124,107 @@ function! gemini#GenerateContent(prompt, model_name) abort
     endif
 endfunction
 
+" Manages a single, persistent buffer for GeminiAsk results
+" " autoload/gemini.vim (Revised s:update_ask_buffer - All comments on separate lines)
+
+" Manages a single, persistent buffer for GeminiAsk results
+function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
+    if empty(a:prompt_text) && empty(a:response_text)
+        echo "No content to display."
+        return
+    endif
+
+    let l:original_win = winnr()
+    let l:original_buf = bufnr('%')
+    let l:original_pos = getpos('.')
+
+    let l:target_bufnr = g:gemini_ask_display_bufnr
+
+    " Check if the buffer exists and is valid.
+    if l:target_bufnr == -1 || !bufexists(l:target_bufnr) || bufname(l:target_bufnr) !=# '[GeminiAsk Result]' || !buflisted(l:target_bufnr)
+        let l:bufname = '[GeminiAsk Result]'
+        exe 'silent! keepjumps vnew'
+        exe 'silent! file ' . l:bufname
+        let l:target_bufnr = bufnr('%')
+
+        setlocal buftype=nofile
+        setlocal bufhidden=hide
+        exe 'setlocal filetype=' . a:filetype_arg
+
+        let g:gemini_ask_display_bufnr = l:target_bufnr
+    else
+        exe 'buffer ' . l:target_bufnr
+    endif
+
+    " Remove NULL bytes from response
+    let l:cleaned_response_text = substitute(a:response_text, '\x00', '', 'g')
+
+    " Go to the very top of the buffer to insert new content
+    normal! gg
+
+    " Prepare lines for Gemini's response
+    let l:gemini_lines = [
+        \ '### Gemini:',
+        \ ]
+    call extend(l:gemini_lines, split(l:cleaned_response_text, "\n"))
+
+    " Blank line after Gemini's response
+    call add(l:gemini_lines, '')
+
+
+    " Prepare lines for User's prompt
+    let l:user_lines = [
+        \ '### User:',
+        \ ]
+    call extend(l:user_lines, split(a:prompt_text, "\n"))
+
+    " Blank line after user's prompt
+    call add(l:user_lines, '')
+
+    " Add a separator before previous conversations, but only if there's existing content
+    " Using getbufinfo() and its 'linecount' field for robustness
+    if exists('*getbufinfo')
+        let l:buf_info = getbufinfo(l:target_bufnr)
+        " Check if getbufinfo found the buffer and it has lines
+        if !empty(l:buf_info) && get(l:buf_info[0], 'linecount', 0) > 0
+            " Add separator at top
+            call append(0, ["", "---", ""])
+        endif
+    else
+        " Fallback if getbufinfo() is not available (should be in Vim 7.4+)
+        " Use linecount() function as a highly compatible alternative.
+        if exists('*linecount')
+            if linecount(l:target_bufnr) > 0
+                call append(0, ["", "---", ""])
+            endif
+        else
+            " Absolute fallback if neither exist: check visual lines.
+            if !empty(getline(1, '$'))
+                call append(0, ["", "---", ""])
+            endif
+        endif
+    endif
+
+    " Insert Gemini's response at the top (after separator if any)
+    call append(0, l:gemini_lines)
+
+    " Insert User's prompt just before Gemini's (so it appears above Gemini)
+    call append(0, l:user_lines)
+
+    " Go to the very top of the buffer (where new content was added)
+    normal! gg
+
+    call s:apply_gemini_highlights()
+
+    " Ensure buffer is not marked as modified (for cleaner display)
+    setlocal nomodified
+
+    " Return to original buffer and position
+    exe l:original_win . 'wincmd w'
+    exe 'buffer ' . l:original_buf
+    call setpos('.', l:original_pos)
+endfunction
+
 " Opens a new scratch buffer and populates it with text.
 function! s:display_in_new_buffer(content, filetype_arg) abort
     if empty(a:content)
@@ -112,7 +256,7 @@ function! gemini#Ask(...) abort
     let l:response = gemini#GenerateContent(l:prompt, g:gemini_default_model)
 
     if !empty(l:response)
-        call s:display_in_new_buffer(l:response, 'markdown')
+        call s:update_ask_buffer(l:prompt, l:response, 'markdown')
         echo "Gemini response received."
     else
         echoerr "Gemini did not return a response."
