@@ -306,7 +306,7 @@ function! gemini#SendVisualSelection() abort range
 
     if !empty(l:response)
         " Keeping s:display_in_new_buffer for these as they are transient.
-        call s:update_ask_buffer("", l:response, 'markdown')
+        call s:update_ask_buffer(l:selected_text, l:response, 'markdown')
         echo "Gemini response received in new buffer."
     else
         echoerr "Gemini did not return a response."

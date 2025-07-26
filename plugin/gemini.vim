@@ -62,7 +62,8 @@ command! -nargs=* GeminiAsk call gemini#Ask(<f-args>)
 " Command: :GeminiAskVisual
 " Visually select code, then ask Gemini a question about it.
 " RESTORED '-range=%' for standard visual mode usage.
-command! -range=% GeminiAskVisual call gemini#AskVisual()
+"command! -range=% GeminiAskVisual call gemini#AskVisual()
+command! -range -nargs=* GeminiAskVisual call gemini#AskVisual(<f-args>)
 
 " Command: :GeminiGenerateVisual
 " Sends the currently selected text (in visual mode) to Gemini.
