@@ -109,7 +109,7 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
         return
     endif
 
-    let l:original_win = winnr()
+    let l:original_win = win_getid()
     let l:original_buf = bufnr('%')
     let l:original_pos = getpos('.')
 
@@ -122,14 +122,21 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
         exe 'silent! keepjumps vnew'
         exe 'silent! file ' . l:bufname
         let l:target_bufnr = bufnr('%')
+        if l:target_bufnr == -1
+            let l:target_bufnr = bufnr('%')
+            if bufname(l:target_bufnr) !=# l:bufname
+                echoerr "Gemini.vim: Internal error - could not create unique ask buffer."
+                return -1
+            endif
+        endif
 
-        " Set buffer options for a scratch buffer.
-        setlocal buftype=nofile
-        "setlocal bufhidden=hide
-        exe 'setlocal filetype=' . a:filetype_arg
-        
+        call setbufvar(l:target_bufnr, '&buftype', 'nofile')
+        "call setbufvar(l:target_bufnr, '&bufhidden', 'delete')
+        call setbufvar(l:target_bufnr, '&filetype', a:filetype_arg)
+
         " Store the new bufnr globally.
         let g:gemini_ask_display_bufnr = l:target_bufnr
+        exe 'buffer ' . l:target_bufnr
     else
         " Buffer already exists, just switch to it.
         exe 'buffer ' . l:target_bufnr
@@ -199,7 +206,7 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
     setlocal nomodified
 
     " Return to original buffer and position.
-    exe l:original_win . 'wincmd w'
+    win_gotoid(l:original_win)
     exe 'buffer ' . l:original_buf
     call setpos('.', l:original_pos)
 endfunction
@@ -223,8 +230,8 @@ function! gemini#Ask(...) abort
     let l:response = gemini#GenerateContent(l:prompt, g:gemini_default_model)
 
     if !empty(l:response) " Update the Ask buffer with user's prompt and Gemini's response.
-        call s:update_ask_buffer(l:prompt, l:response, 'markdown')
         echo "Gemini response received."
+        call s:update_ask_buffer(l:prompt, l:response, 'markdown')
     else
         echoerr "Gemini did not return a response."
     endif
@@ -233,6 +240,7 @@ endfunction
 " Command handler for :GeminiAskVisual
 function! gemini#AskVisual(...) abort range
     let l:original_win = winnr()
+    let l:current_win_id = win_getid()
     let l:original_buf = bufnr('%')
     let l:original_pos = getpos('.')
 
@@ -284,14 +292,15 @@ function! gemini#AskVisual(...) abort range
 
     if !empty(l:response)
         " Update the Ask buffer with the *full combined prompt* (including code) and Gemini's response.
-        call s:update_ask_buffer(l:combined_prompt_for_gemini, l:response, 'markdown')
         echo "Gemini response received."
+        call s:update_ask_buffer(l:combined_prompt_for_gemini, l:response, 'markdown')
     else
         echoerr "Gemini did not return a response."
     endif
 
     " Return to original buffer and position.
-    exe l:original_win . 'wincmd w'
+    call win_gotoid(l:current_win_id)
+    "exe l:original_win . 'wincmd w'
     exe 'buffer ' . l:original_buf
     call setpos('.', l:original_pos)
 endfunction
@@ -321,8 +330,7 @@ function! gemini#SendBuffer() abort
 
     if !empty(l:response)
         " Keeping s:display_in_new_buffer for these as they are transient.
-        "call s:display_in_new_buffer(l:response, 'markdown')
-        call s:update_ask_buffer("", l:response, 'markdown')
+        call s:update_ask_buffer(l:buffer_content, l:response, 'markdown')
         echo "Gemini response received in new buffer."
     else
         echoerr "Gemini did not return a response."
