@@ -99,7 +99,7 @@ command! -nargs=0 GeminiGenerateBuffer call gemini#SendBuffer()
 " Command: :GeminiReplaceVisual
 " Sends the currently selected text (in visual mode) to Gemini and replaces
 " the selection directly with Gemini's response.
-command! -range=% GeminiReplaceVisual call gemini#SendVisualSelectionReplace()
+command! -range=% -nargs=* GeminiReplaceVisual call gemini#SendVisualSelectionReplace(<f-args>)
 
 " --- Chat Session Commands ---
 

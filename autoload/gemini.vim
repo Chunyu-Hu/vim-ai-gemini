@@ -486,8 +486,26 @@ function! gemini#SendVisualSelection() abort range
 
     let l:selected_text = join(getline(l:startline, l:endline), "\n")
 
+    if a:0 > 0
+        let l:user_prompt_text = join(a:000, ' ')
+    else
+        let l:user_prompt_text = input("Ask Gemini: ")
+    endif
+
+    " Simplify the combined prompt: just concatenate, no markdown fences.
+    let l:combined_prompt_for_gemini = ''
+    if !empty(l:user_prompt_text)
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:user_prompt_text
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n\n"
+    endif
+    if !empty(l:selected_text)
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n"
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_text . "\n"
+    endif
+
     " Apply the prompt template
-    let l:final_prompt = substitute(g:gemini_send_visual_selection_prompt_template, '{text}', l:selected_text, 'g')
+    let l:final_prompt = substitute(g:gemini_send_visual_selection_prompt_template, '{text}', l:combined_prompt_for_gemini, 'g')
+
 
     " Add an undo point before potentially changing the buffer or opening a new one
     " if g:gemini_send_visual_selection_display_mode ==# 'insert'
@@ -523,12 +541,12 @@ xnoremap <leader>gv :<C-u>call gemini#SendVisualSelection()<CR>
 
 
 " Command handler for :GeminiReplaceVisual (in-place replacement)
-function! gemini#SendVisualSelectionReplace() abort range
+function! gemini#SendVisualSelectionReplace(...) abort range
     " Save current view/cursor position (optional, good for undo/inspect).
     normal! gv"ay
 
     " Get the selected text.
-    let l:start_line = a:firstline
+    let l:start_line = line("'<")
     let l:end_line = line("'>")
     let l:selected_text = join(getline(l:start_line, l:end_line), "\n")
 
@@ -544,7 +562,7 @@ function! gemini#SendVisualSelectionReplace() abort range
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:user_prompt_text
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n\n"
     endif
-    if !empty(l:buffer_content)
+    if !empty(l:selected_text)
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n"
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_text . "\n"
     endif
@@ -552,7 +570,7 @@ function! gemini#SendVisualSelectionReplace() abort range
     echo "Sending selected text to Gemini for replacement..."
 
     " Call the Python function.
-    let l:response = gemini#GenerateContent(l:selected_text, g:gemini_default_model)
+    let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
 
     if !empty(l:response)
         " Delete the current visual selection.
