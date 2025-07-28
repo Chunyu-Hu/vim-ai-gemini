@@ -532,6 +532,23 @@ function! gemini#SendVisualSelectionReplace() abort range
     let l:end_line = line("'>")
     let l:selected_text = join(getline(l:start_line, l:end_line), "\n")
 
+    if a:0 > 0
+        let l:user_prompt_text = join(a:000, ' ')
+    else
+        let l:user_prompt_text = input("Ask Gemini: ")
+    endif
+
+    " Simplify the combined prompt: just concatenate, no markdown fences.
+    let l:combined_prompt_for_gemini = ''
+    if !empty(l:user_prompt_text)
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:user_prompt_text
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n\n"
+    endif
+    if !empty(l:buffer_content)
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n"
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_text . "\n"
+    endif
+
     echo "Sending selected text to Gemini for replacement..."
 
     " Call the Python function.
