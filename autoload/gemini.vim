@@ -206,7 +206,7 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
     setlocal nomodified
 
     " Return to original buffer and position.
-    win_gotoid(l:original_win)
+    call win_gotoid(l:original_win)
     exe 'buffer ' . l:original_buf
     call setpos('.', l:original_pos)
 endfunction
@@ -298,7 +298,7 @@ function! gemini#AskVisual(...) abort range
     endif
 
     " Return to original buffer and position.
-    win_gotoid(l:current_win_id)
+    call win_gotoid(l:current_win_id)
     "exe l:original_win . 'wincmd w'
     exe 'buffer ' . l:original_buf
     call setpos('.', l:original_pos)
@@ -309,8 +309,24 @@ endfunction
 function! gemini#SendVisualSelection() abort range
     let l:lastline = line("'>")
     let l:selected_text = join(getline(a:firstline, l:lastline), "\n")
+    if a:0 > 0
+        let l:user_prompt_text = join(a:000, ' ')
+    else
+        let l:user_prompt_text = input("Ask Gemini: ")
+    endif
+
+    " Simplify the combined prompt: just concatenate, no markdown fences.
+    let l:combined_prompt_for_gemini = ''
+    if !empty(l:user_prompt_text)
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:user_prompt_text
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n\n"
+    endif
+    if !empty(l:selected_code)
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "Code:\n"
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_code . "\n"
+    endif
     echo "Sending selected text to Gemini..."
-    let l:response = gemini#GenerateContent(l:selected_text, g:gemini_default_model)
+    let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
 
     if !empty(l:response)
         " Keeping s:display_in_new_buffer for these as they are transient.
@@ -324,8 +340,24 @@ endfunction
 " Command handler for :GeminiGenerateBuffer
 function! gemini#SendBuffer() abort
     let l:buffer_content = join(getline(1, '$'), "\n")
+    if a:0 > 0
+        let l:user_prompt_text = join(a:000, ' ')
+    else
+        let l:user_prompt_text = input("Ask Gemini: ")
+    endif
+
+    " Simplify the combined prompt: just concatenate, no markdown fences.
+    let l:combined_prompt_for_gemini = ''
+    if !empty(l:user_prompt_text)
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:user_prompt_text
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n\n"
+    endif
+    if !empty(l:buffer_content)
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n"
+        let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:buffer_content . "\n"
+    endif
     echo "Sending entire buffer to Gemini..."
-    let l:response = gemini#GenerateContent(l:buffer_content, g:gemini_default_model)
+    let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
 
     if !empty(l:response)
         " Keeping s:display_in_new_buffer for these as they are transient.
@@ -360,7 +392,7 @@ function! s:display_in_new_buffer(content, filetype_arg) abort
     call s:apply_gemini_highlights()
 
     " Return to original buffer and position.
-    win_gotoid(l:original_win)
+    call win_gotoid(l:original_win)
     exe 'buffer ' . l:original_buf
     call setpos('.', l:original_pos)
 endfunction
