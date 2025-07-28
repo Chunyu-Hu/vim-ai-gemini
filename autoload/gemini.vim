@@ -119,7 +119,7 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
     if l:target_bufnr == -1 || !bufexists(l:target_bufnr) || bufname(l:target_bufnr) !=# '[GeminiAsk Result]' || !buflisted(l:target_bufnr)
         let l:bufname = '[GeminiAsk Result]'
         " Always create in a vertical split.
-        exe 'silent! keepjumps vnew'
+        exe 'silent! keepjumps rightbelow vnew'
         exe 'silent! file ' . l:bufname
         let l:target_bufnr = bufnr('%')
         if l:target_bufnr == -1
@@ -239,7 +239,6 @@ endfunction
 
 " Command handler for :GeminiAskVisual
 function! gemini#AskVisual(...) abort range
-    let l:original_win = winnr()
     let l:current_win_id = win_getid()
     let l:original_buf = bufnr('%')
     let l:original_pos = getpos('.')
@@ -299,7 +298,7 @@ function! gemini#AskVisual(...) abort range
     endif
 
     " Return to original buffer and position.
-    call win_gotoid(l:current_win_id)
+    win_gotoid(l:current_win_id)
     "exe l:original_win . 'wincmd w'
     exe 'buffer ' . l:original_buf
     call setpos('.', l:original_pos)
@@ -344,12 +343,12 @@ function! s:display_in_new_buffer(content, filetype_arg) abort
         return
     endif
 
-    let l:original_win = winnr()
+    let l:original_win = win_getid()
     let l:original_buf = bufnr('%')
     let l:original_pos = getpos('.')
 
     " Use :vnew to create a new vertical split for the response.
-    exe 'silent! keepjumps vnew'
+    exe 'silent! keepjumps rightbelow vnew'
     
     " Set buffer options for the response buffer.
     setlocal buftype=nofile
@@ -361,10 +360,134 @@ function! s:display_in_new_buffer(content, filetype_arg) abort
     call s:apply_gemini_highlights()
 
     " Return to original buffer and position.
-    exe l:original_win . 'wincmd w'
+    win_gotoid(l:original_win)
     exe 'buffer ' . l:original_buf
     call setpos('.', l:original_pos)
 endfunction
+
+" Helper function to display the Gemini response
+function! gemini#_DisplayResponse(response_text) abort
+    let l:display_mode = get(g:, 'gemini_send_visual_selection_display_mode', 'new_buffer')
+    let l:updated_response_text = "🌈" . a:response_text . "💖"
+    if l:display_mode ==# 'new_buffer'
+        " Open a new scratch buffer to display the response
+        execute 'silent! rightbelow new GeminiResponse'
+        setlocal buftype=nofile
+        setlocal bufhidden=wipe
+        setlocal nobuflisted
+        "setlocal nomodifiable
+        setlocal nowrap
+        call setline(1, split(l:updated_response_text, "\n"))
+        normal! Gzt
+        " Set filetype if it looks like code, or just for general text
+        if a:response_text =~? '\(^\s*function\|\<def\s\+class\|\<import\s\+.*\)'
+            " Basic heuristic, might need refinement
+            execute 'setfiletype ' . get(g:, 'gemini_response_filetype', 'markdown')
+        else
+            setfiletype markdown " Default to markdown for better readability
+        endif
+        normal! gg
+    elseif l:display_mode ==# 'popup'
+        " Use popup_atcursor for a floating window
+        " Clear existing highlights (useful if running the script multiple times)
+        silent! hi clear PopupColorfulBody
+        silent! hi clear PopupColorfulBorder
+        silent! hi clear PopupColorfulTitle
+
+        " Define highlight group for the popup body (text and background)
+        " ctermfg/bg for terminal Vim, guifg/bg for GUI Vim
+        exec 'hi PopupColorfulBody ctermfg=17 ctermbg=24 guifg=#0088BB guibg=#ADD8E6'
+
+        " Define highlight group for the popup border
+        exec 'hi PopupColorfulBorder cterm=bold ctermfg=198 guifg=#FF1493'
+
+        " Define highlight group for the popup title (optional, using standard Title is also fine)
+        exec 'hi PopupColorfulTitle cterm=bold ctermfg=230 ctermbg=202 guifg=#FFFFFF guibg=#FFFF88'
+
+        call popup_atcursor(split(l:updated_response_text, "\n"), {
+              \ 'title': 'Gemini Response',
+              \ 'line': 1,
+              \ 'col': 1,
+              \ 'width': winwidth(0) * 2 / 3,
+              \ 'height': winheight(0) * 2 / 3,
+              \ 'border': ['single', 'PopupColorfulBorder'],
+              \ 'wrap': v:true,
+              \ 'mapping': 'normal',
+              \ 'close': 'button',
+              \ 'moved': "word",
+              \ 'highlight': 'PopupColorfulBody',
+              \ })
+    elseif l:display_mode ==# 'insert'
+        " Insert the response directly into the buffer
+        let l:current_pos = getpos('.')
+        call append(line('.'), split(a:response_text, "\n"))
+        call setpos('.', l:current_pos) " Restore cursor position
+        echomsg "Gemini response inserted."
+    elseif l:display_mode ==# 'echomsg'
+        echomsg "Gemini Response: " . a:response_text
+    else
+        echomsg "Unknown display mode: " . l:display_mode
+        echomsg "Gemini Response: " . a:response_text
+    endif
+endfunction
+
+
+" Main function to send visual selection
+function! gemini#SendVisualSelection() abort range
+    " Ensure there is a visual selection. 'range' itself indicates lines are selected.
+    " For character-wise selection, '< and '> marks can be used more precisely.
+    " However, `getline(a:firstline, a:lastline)` will always get full lines.
+    " If you want *exact* character-wise selection, you'd need to yank it first:
+    " let l:selected_text = getreg('"')
+    " But for LLM tasks, often line-wise is sufficient.
+
+    let l:startline = line("'<")
+    let l:endline = line("'>")
+
+    " Check if a valid range was selected
+    if l:startline == 0 || l:endline == 0
+        echohl ErrorMsg
+        echomsg "No visual selection found. Please select text visually (v, V, <C-v>) first."
+        echohl None
+        return
+    endif
+
+    let l:selected_text = join(getline(l:startline, l:endline), "\n")
+
+    " Apply the prompt template
+    let l:final_prompt = substitute(g:gemini_send_visual_selection_prompt_template, '{text}', l:selected_text, 'g')
+
+    " Add an undo point before potentially changing the buffer or opening a new one
+    " if g:gemini_send_visual_selection_display_mode ==# 'insert'
+    " This is handled by the calling command if you map it to `:call`
+    " endif
+
+    echo "Sending selected text to Gemini (model: " . g:gemini_default_model . ")..."
+
+    " Use a try-catch block for error handling
+    try
+        let l:response = gemini#GenerateContent(l:final_prompt, g:gemini_default_model)
+
+        if empty(l:response)
+            echohl WarningMsg
+            echomsg "Gemini returned an empty response."
+            echohl None
+        else
+            call gemini#_DisplayResponse(l:response)
+            echomsg "Gemini response received."
+        endif
+
+    catch /.*/
+        echohl ErrorMsg
+        echomsg "Error communicating with Gemini: " . v:exception
+        echohl None
+    endtry
+endfunction
+
+" Map it for convenience
+" Recommended mapping: enter visual mode, select text, then press <leader>gv
+" Or for line-wise visual mode: V, select lines, <leader>gv
+xnoremap <leader>gv :<C-u>call gemini#SendVisualSelection()<CR>
 
 
 " Command handler for :GeminiReplaceVisual (in-place replacement)
@@ -374,7 +497,7 @@ function! gemini#SendVisualSelectionReplace() abort range
 
     " Get the selected text.
     let l:start_line = a:firstline
-    let l:end_line = a:lastline
+    let l:end_line = line("'>")
     let l:selected_text = join(getline(l:start_line, l:end_line), "\n")
 
     echo "Sending selected text to Gemini for replacement..."
@@ -455,7 +578,7 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
         let l:bufname = '[Gemini Chat] ' . a:session_id[:7] " Use a prefix for buffer name.
         try
             " Use :vnew to create an empty buffer in a new vertical split, then :file to name it.
-            exe 'silent! keepjumps vnew'
+            exe 'silent! keepjumps rightbelow vnew'
             exe 'silent! file ' . l:bufname
 
             let l:bufnr = bufnr(l:bufname)

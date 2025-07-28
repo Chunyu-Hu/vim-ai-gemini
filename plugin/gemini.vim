@@ -11,6 +11,27 @@ if !exists('g:gemini_popup_id')
   let g:gemini_popup_id = -1
 endif
 
+" Configuration Variables (place these in your init.vim/init.lua)
+" g:gemini_default_model: already assumed to exist
+if !exists('g:gemini_send_visual_selection_prompt_template')
+    " This template will wrap your selected text.
+    " Use {text} as a placeholder for the visual selection.
+    " Example: "Explain this code:\n{text}"
+    " Example: "Summarize the following:\n{text}"
+    " Example: "Refactor this Vimscript:\n{text}"
+    let g:gemini_send_visual_selection_prompt_template = "{text}"
+endif
+
+if !exists('g:gemini_send_visual_selection_display_mode')
+    " How to display the Gemini response:
+    " 'new_buffer': Open in a new scratch buffer (default, best for code/long text)
+    " 'popup': Display in a floating window (good for short summaries)
+    " 'insert': Insert at current cursor position (be careful, no undo specific to this)
+    " 'echomsg': Display as a message in the command line (truncated for long text)
+    let g:gemini_send_visual_selection_display_mode = 'popup'
+endif
+
+
 " ============================================================================
 " Global Configuration Variables (with default values)
 " Users can override these in their .vimrc
