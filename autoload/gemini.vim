@@ -778,7 +778,7 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
             if l:bufnr != -1
                 " Set buffer options for a scratch buffer. Keeping only essential ones that should always work.
                 call setbufvar(l:bufnr, '&buftype', 'nofile')      " Marks as not a real file.
-                call setbufvar(l:bufnr, '&bufhidden', 'delete')   " Deletes buffer when no windows show it.
+                "call setbufvar(l:bufnr, '&bufhidden', 'delete')   " Deletes buffer when no windows show it.
                 call setbufvar(l:bufnr, '&filetype', 'markdown')  " Sets syntax highlighting.
                 
                 " Store session ID in buffer-local variable for context.
@@ -850,8 +850,6 @@ function! gemini#SendMessage(message_text) abort
     " Blank line after user's prompt.
     call add(l:user_lines, '')
 
-    call append(line('$'), l:user_lines)
-
     call s:apply_gemini_highlights() " Apply highlights after appending.
     
     setlocal nomodified
@@ -883,11 +881,9 @@ function! gemini#SendMessage(message_text) abort
 
 		" Blank line after Gemini's response.
 		call add(l:gemini_lines, '')
-
         " Append Gemini's response lines to the list.
-        call append(line('$'), l:gemini_lines)
+        call append(1, l:gemini_lines)
         
-        call s:apply_gemini_highlights()
         
         setlocal nomodified
         echo "Gemini replied in session " . g:gemini_current_chat_id[:7]
@@ -895,6 +891,9 @@ function! gemini#SendMessage(message_text) abort
     else
         echoerr "Gemini chat error: " . l:result.error
     endif
+
+    call append(1 , l:user_lines)
+    call s:apply_gemini_highlights()
 
     " Return to original buffer and position.
     exe l:current_win . 'wincmd w'
