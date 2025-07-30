@@ -397,6 +397,98 @@ function! s:display_in_new_buffer(content, filetype_arg) abort
     call setpos('.', l:original_pos)
 endfunction
 
+let s:popup_all_lines = []
+let s:popup_start_line = 0
+let g:popup_bufnr = -1
+function! s:UpdatePopup()
+  " Extract a 20-line slice from popup_all_lines starting at popup_start_line
+  let slice = s:popup_all_lines[s:popup_start_line : s:popup_start_line + 19]
+  call popup_settext(g:gemini_popup_id, slice)
+endfunction
+
+function! s:PopupFilter(id, key)
+  if a:key ==# 'q'
+    " Close popup and return to previous window
+    call popup_close(a:id)
+    call win_gotoid(g:previous_winid)
+    return 1
+
+  elseif a:key ==# 'j'
+    " Scroll down if more lines are below
+    if s:popup_start_line + 20 < len(s:popup_all_lines)
+      let s:popup_start_line += 1
+      call s:UpdatePopup()
+    endif
+    return 1
+
+  elseif a:key ==# 'k'
+    " Scroll up if not at top
+    if s:popup_start_line > 0
+      let s:popup_start_line -= 1
+      call s:UpdatePopup()
+    endif
+    return 1
+  elseif a:key ==# 'v' || a:key ==# 'V' || a:key ==# 'y'
+    let popup_height = winheight(a:id)
+    let end_index = min([s:popup_start_line + popup_height, len(s:popup_all_lines)])
+    let visible_lines = s:popup_all_lines[s:popup_start_line : end_index - 1]
+    let content_to_copy = join(visible_lines, "\n")
+    try
+      let @+ = content_to_copy
+      let @* = content_to_copy
+    catch /E291/:
+    endtry
+    let @" = content_to_copy
+    echo printf("%d line(s) copied to register.", len(visible_lines))
+    return 1
+  endif
+  return 0
+endfunction
+
+function! s:ShowPopupResponse(text) abort
+  let s:popup_all_lines = split(a:text, "\n")
+  let g:previous_winid = win_getid()
+
+  " Save a copy to the chat buffer, so use can copy it and record chat history
+  call s:update_ask_buffer('', a:text, 'markdown')
+
+  " Close old popup if visible
+  if exists('g:gemini_popup_id')
+    call popup_close(g:gemini_popup_id)
+    let g:gemini_popup_id = -1
+  endif
+  if g:gemini_popup_id == -1 || popup_getpos(g:gemini_popup_id) == {}
+      let g:gemini_popup_id = popup_create(s:popup_all_lines, {
+          \ 'padding': [1,2,1,1],
+          \ 'pos': 'topleft',
+          \ 'line': 10,
+          \ 'col': 10,
+          \ 'maxwidth': 120,
+          \ 'minheight': 5,
+          \ 'maxheight': 20,
+          \ 'minwidth': 60,
+          \ 'zindex': 10,
+          \ 'mapping': v:true,
+          \ 'wrap': v:true,
+          \ 'scrollbar': 1,
+          \ 'filter': function('s:PopupFilter', {}),
+          \ 'highlight': 'PopupColorfulBody',
+          \ 'border': ['single', 'PopupColorfulBorder'],
+          \ })
+
+    "call s:HighlightPopup(g:gemini_popup_id)
+    " Jump cursor to popup window
+    call win_gotoid(g:gemini_popup_id)
+    " Map 'q' inside popup to close it and jump back to previous window
+    call win_execute(g:gemini_popup_id, printf(
+    \ 'nnoremap <buffer> q :call popup_close(%d) \| call win_gotoid(%d)<CR>',
+    \ g:gemini_popup_id, g:previous_winid))
+
+  endif
+
+  " No popup_getwin / win_execute in Vim — skip scroll-to-bottom
+endfunction
+
 " Helper function to display the Gemini response
 function! gemini#_DisplayResponse(response_text) abort
     let l:display_mode = get(g:, 'gemini_send_visual_selection_display_mode', 'new_buffer')
@@ -435,6 +527,8 @@ function! gemini#_DisplayResponse(response_text) abort
 
         " Define highlight group for the popup title (optional, using standard Title is also fine)
         exec 'hi PopupColorfulTitle cterm=bold ctermfg=230 ctermbg=202 guifg=#FFFFFF guibg=#FFFF88'
+        call s:ShowPopupResponse(a:response_text)
+		return
 
         call popup_atcursor(split(l:updated_response_text, "\n"), {
               \ 'title': 'Gemini Response',
