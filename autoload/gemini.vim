@@ -248,17 +248,17 @@ function! gemini#AskVisual(...) abort range
     let l:selected_code = join(getline(l:start_line, l:end_line), "\n")
 
     " Fallback to clipboard registers if unnamed is empty (e.g., another yank happened or no selection).
-    if empty(l:selected_code) && has('clipboard')
-        let l:temp_clipboard_content_star = getreg('*')
-        if !empty(l:temp_clipboard_content_star)
-            let l:selected_code = l:temp_clipboard_content_star
-        else
-            let l:temp_clipboard_content_plus = getreg('+')
-            if !empty(l:temp_clipboard_content_plus)
-                let l:selected_code = l:temp_clipboard_content_plus
-            endif
-        endif
-    endif
+    "if empty(l:selected_code) && has('clipboard')
+        "let l:temp_clipboard_content_star = getreg('*')
+        "if !empty(l:temp_clipboard_content_star)
+            "let l:selected_code = l:temp_clipboard_content_star
+        "else
+            "let l:temp_clipboard_content_plus = getreg('+')
+            "if !empty(l:temp_clipboard_content_plus)
+                "let l:selected_code = l:temp_clipboard_content_plus
+            "endif
+        "endif
+    "endif
 
     if a:0 > 0
         let l:user_prompt_text = join(a:000, ' ')
