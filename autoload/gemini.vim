@@ -23,6 +23,8 @@ if !exists('g:gemini_ask_display_bufnr')
     let g:gemini_ask_display_bufnr = -1
 endif
 
+let g:model_info = "(model: " . g:gemini_default_model . ")..."
+
 " ============================================================================
 " Python Interface Helpers
 " ============================================================================
@@ -218,7 +220,8 @@ function! gemini#Ask(...) abort
     if a:0 > 0
         let l:prompt = join(a:000, ' ')
     else
-        let l:prompt = input("Ask Gemini: ")
+        let l:prompt = input("Ask Gemini (model:" . g:gemini_default_model . "): ")
+        echo '\n'
     endif
 
     if empty(l:prompt)
@@ -263,7 +266,8 @@ function! gemini#AskVisual(...) abort range
     if a:0 > 0
         let l:user_prompt_text = join(a:000, ' ')
     else
-        let l:user_prompt_text = input("Ask Gemini: ")
+        let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "): ")
+        echo '\n'
     endif
 
     " Exit if user cancels or provides no prompt and no code selected.
@@ -284,7 +288,7 @@ function! gemini#AskVisual(...) abort range
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_code . "\n"
     endif
 
-    echo "Sending combined prompt and code to Gemini..."
+    echo "Sending combined prompt and code to Gemini " . g:model_info
     
     " Call Python to generate content using the combined prompt.
     let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
@@ -312,7 +316,8 @@ function! gemini#SendVisualSelection() abort range
     if a:0 > 0
         let l:user_prompt_text = join(a:000, ' ')
     else
-        let l:user_prompt_text = input("Ask Gemini: ")
+        let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "):")
+        echo '\n'
     endif
 
     " Simplify the combined prompt: just concatenate, no markdown fences.
@@ -325,7 +330,8 @@ function! gemini#SendVisualSelection() abort range
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "Code:\n"
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_code . "\n"
     endif
-    echo "Sending selected text to Gemini..."
+    echo "Sending selected text to Gemini " . g:model_info
+
     let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
 
     if !empty(l:response)
@@ -344,6 +350,7 @@ function! gemini#SendBuffer() abort
         let l:user_prompt_text = join(a:000, ' ')
     else
         let l:user_prompt_text = input("Ask Gemini: ")
+        echo '\n'
     endif
 
     " Simplify the combined prompt: just concatenate, no markdown fences.
@@ -356,7 +363,7 @@ function! gemini#SendBuffer() abort
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n"
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:buffer_content . "\n"
     endif
-    echo "Sending entire buffer to Gemini..."
+    echo "Sending entire buffer to Gemini" . g:model_info
     let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
 
     if !empty(l:response)
@@ -596,7 +603,8 @@ function! gemini#SendVisualSelection() abort range
     if a:0 > 0
         let l:user_prompt_text = join(a:000, ' ')
     else
-        let l:user_prompt_text = input("Ask Gemini: ")
+        let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "): ")
+        echo '\n'
     endif
 
     " Simplify the combined prompt: just concatenate, no markdown fences.
@@ -661,6 +669,7 @@ function! gemini#SendVisualSelectionReplace(...) abort range
         let l:user_prompt_text = join(a:000, ' ')
     else
         let l:user_prompt_text = input("Ask Gemini: ")
+        echo '\n'
     endif
 
     " Simplify the combined prompt: just concatenate, no markdown fences.
@@ -674,7 +683,7 @@ function! gemini#SendVisualSelectionReplace(...) abort range
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_text . "\n"
     endif
 
-    echo "Sending selected text to Gemini for replacement..."
+    echo "Sending selected text to Gemini for replacement" . g:model_info
 
     " Call the Python function.
     let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
