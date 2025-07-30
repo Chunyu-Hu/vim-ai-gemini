@@ -530,19 +530,32 @@ function! gemini#_DisplayResponse(response_text) abort
         call s:ShowPopupResponse(a:response_text)
 		return
 
-        call popup_atcursor(split(l:updated_response_text, "\n"), {
+        let g:gemini_popup_id = popup_atcursor(split(l:updated_response_text, "\n"), {
               \ 'title': 'Gemini Response',
               \ 'line': 1,
               \ 'col': 1,
               \ 'width': winwidth(0) * 2 / 3,
               \ 'height': winheight(0) * 2 / 3,
               \ 'border': ['single', 'PopupColorfulBorder'],
+              \ 'maxwidth': 80,
+              \ 'minheight': 5,
+              \ 'maxheight': 20,
+              \ 'minwidth': 60,
+              \ 'zindex': 10,
+              \ 'mapping': v:true,
               \ 'wrap': v:true,
-              \ 'mapping': 'normal',
-              \ 'close': 'button',
-              \ 'moved': "word",
+              \ 'scrollbar': 1,
+              \ 'filter': function('s:PopupFilter'),
+              \ 'close': 'none',
+              \ 'moved': [0,0,0],
               \ 'highlight': 'PopupColorfulBody',
               \ })
+        " Jump cursor to popup window
+        call win_gotoid(g:gemini_popup_id)
+        " Map 'q' inside popup to close it and jump back to previous window
+        call win_execute(g:gemini_popup_id, printf(
+             \ 'nnoremap <buffer> q :call popup_close(%d) \| call win_gotoid(%d)<CR>',
+             \ g:gemini_popup_id, g:previous_winid))
     elseif l:display_mode ==# 'insert'
         " Insert the response directly into the buffer
         let l:current_pos = getpos('.')
