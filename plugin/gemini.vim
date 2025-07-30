@@ -114,7 +114,7 @@ command! -nargs=1 GeminiChatSend call gemini#SendMessage(<f-args>)
 
 " Command: :GeminiChatSendVisual
 " Sends the visually selected text as a message to the current chat session.
-command! -range=% GeminiChatSendVisual call gemini#SendVisualSelectionToChat()
+command! -range=% -nargs=* GeminiChatSendVisual call gemini#SendVisualSelectionToChat(<f-args>)
 
 " Command: :GeminiChatSendBuffer
 " Sends the entire current buffer content as a message to the current chat session.

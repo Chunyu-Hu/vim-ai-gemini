@@ -902,10 +902,43 @@ function! gemini#SendMessage(message_text) abort
 endfunction
 
 " Command handler for :GeminiChatSendVisual
-function! gemini#SendVisualSelectionToChat() abort range
+function! gemini#SendVisualSelectionToChat(...) abort range
 	let l:lastline = line("'>")
-    let l:selected_text = join(getline(a:firstline, l:lastline), "\n")
-    call gemini#SendMessage(l:selected_text)
+    let l:selected_code = join(getline(a:firstline, l:lastline), "\n")
+    let l:user_prompt_text = ''
+
+    if a:0 > 0
+        let l:user_prompt_text = join(a:000, ' ')
+    else
+        let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "):")
+        " No need for echo '\n' here, input() handles its own output.
+        " If you really want a newline *after* input clears, consider:
+        echo ""
+    endif
+
+    " Simplify the combined prompt: just concatenate, no markdown fences.
+    let l:combined_prompt_for_gemini = ''
+
+    if !empty(l:user_prompt_text)
+        let l:combined_prompt_for_gemini .= l:user_prompt_text
+    endif
+
+    if !empty(l:selected_code)
+        " Add separator only if both prompt and code exist, or if only code exists
+        if !empty(l:user_prompt_text)
+            let l:combined_prompt_for_gemini .= "\n\n" " Two newlines for separation
+        endif
+
+        " IMPORTANT: Wrap code in markdown fences for AI
+        " You might want to auto-detect the language or make it configurable.
+        " For now, let's assume a generic code block or add a placeholder.
+        " Example: ```vim (or ```python, ```javascript, etc.)
+        " Or just ``` for a generic block if language detection is hard.
+        let l:combined_prompt_for_gemini .= "```\n" . l:selected_code . "\n```\n"
+    endif
+
+    echo "Sending selected text to Gemini " . g:model_info
+    call gemini#SendMessage(l:combined_prompt_for_gemini)
 endfunction
 
 " Command handler for :GeminiChatSendBuffer
