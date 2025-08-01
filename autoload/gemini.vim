@@ -216,6 +216,68 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
     call setpos('.', l:original_pos)
 endfunction
 
+" Function to save the current GeminiAsk chat buffer to a log file.
+" The file name will be gemini-ask.YYYY-MM-DD_HH-MM-SS.log
+function! gemini#SaveAskLog() abort
+    " Check if logging is enabled (optional, but good practice if you have a g:gemini_ask_log_enabled for this specific feature)
+    " The original config only had g:gemini_ask_log_enabled for the "file logging" not "chat save"
+    " For now, we'll assume this save function is always available if called.
+
+    " 1. Validate the GeminiAsk display buffer
+    if !exists('g:gemini_ask_display_bufnr') || g:gemini_ask_display_bufnr == -1
+        echoerr "Gemini.vim: No active GeminiAsk Result buffer to save."
+        return
+    endif
+
+    let l:target_bufnr = g:gemini_ask_display_bufnr
+    if !bufexists(l:target_bufnr) || bufname(l:target_bufnr) !=# '[GeminiAsk Result]'
+        echoerr "Gemini.vim: GeminiAsk Result buffer not found or is invalid."
+        return
+    endif
+
+    " Get all lines from the target buffer
+    let l:lines = getbufline(l:target_bufnr, 1, '$')
+
+    " If the buffer is empty, there's nothing to save
+    if empty(l:lines)
+        echo "Gemini.vim: GeminiAsk Result buffer is empty. Nothing to save."
+        return
+    endif
+
+    " 2. Prepare the log directory
+    " Ensure g:gemini_ask_log_dir is set (it should be from your config snippet)
+    if !exists('g:gemini_ask_log_dir') || empty(g:gemini_ask_log_dir)
+        echoerr "Gemini.vim: Log directory (g:gemini_ask_log_dir) is not set. Cannot save log."
+        return
+    endif
+
+    let l:log_dir = g:gemini_ask_log_dir
+
+    " Create the directory if it doesn't exist
+    if !isdirectory(l:log_dir)
+        try
+            call mkdir(l:log_dir, 'p') " 'p' creates parent directories
+        catch /E/
+            echoerr "Gemini.vim: Could not create log directory '" . l:log_dir . "': " . v:exception
+            return
+        endtry
+    endif
+
+    " 3. Generate the unique filename
+    " Format: gemini-ask.YYYY-MM-DD_HH-MM-SS.log
+    let l:date_str = strftime('%Y-%m-%d_%H-%M-%S')
+    let l:filename = 'gemini-ask.' . l:date_str . '.log'
+    let l:full_path = l:log_dir . '/' . l:filename
+
+    " 4. Save the content to the file
+    try
+        call writefile(l:lines, l:full_path, 'w') " 'w' to write (overwrite if exists, but filename is unique)
+        echo "GeminiAsk chat log saved to: " . l:full_path
+    catch /E/
+        echoerr "Gemini.vim: Failed to save log to '" . l:full_path . "': " . v:exception
+    endtry
+endfunction
+
 
 " Command handler for :GeminiAsk
 function! gemini#Ask(...) abort
@@ -854,6 +916,175 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
     endif
     return -1
 endfunction
+
+" Function to save a Gemini chat session buffer to a log file.
+" The file name will be gemini-chat.$(session_id).YYYY-MM-DD_HH-MM-SS.log
+"
+" @param a:session_id (optional string): The ID of the session to save.
+"                                      If empty, saves the current buffer's session.
+function! gemini#SaveChatLog(...) abort
+    let l:session_id = v:null
+
+    " Check the number of arguments passed
+    if a:0 == 1
+        " If one argument is provided, use it as the session_id
+        let l:session_id = a:[0]
+    elseif a:0 > 1
+        " Handle cases where too many arguments are passed (optional: throw an error)
+        echohl ErrorMsg | echo "Error: gemini#SaveChatLog accepts zero or one argument, but " . a:0 . " were given." | echohl None
+        return
+    else
+		if (g:gemini_current_chat_id > 0)
+            let l:session_id = g:gemini_current_chat_id
+        endif
+    endif
+
+    " Determine which buffer to save
+    if !empty(l:session_id)
+        " User specified a session ID
+        if !has_key(g:gemini_chat_buffers, l:session_id)
+            echoerr "Gemini.vim: Session ID '" . l:session_id . "' not found in active chat buffers."
+            return
+        endif
+        let l:target_bufnr = g:gemini_chat_buffers[l:session_id]
+        let l:current_session_id = l:session_id
+    else
+        " No session ID specified, try to save the current buffer if it's a chat session.
+        let l:current_bufnr = bufnr('%')
+        if bufexists(l:current_bufnr) && getbufvar(l:current_bufnr, '&buftype') ==# 'nofile' && bufname(l:current_bufnr) =~# '^\[Gemini Chat\]'
+            " It looks like a chat buffer, try to get the session ID from its buffer variable.
+            if exists('b:gemini_session_id') && !empty(b:gemini_session_id)
+                let l:target_bufnr = l:current_bufnr
+                let l:current_session_id = b:gemini_session_id
+            else
+                echoerr "Gemini.vim: Current buffer is a chat buffer, but 'b:gemini_session_id' is not set. Cannot determine session to save."
+                return
+            endif
+        else
+            echoerr "Gemini.vim: Not currently in a Gemini chat buffer. Please specify a session ID or switch to a chat buffer."
+            return
+        endif
+    endif
+
+    " Final validation of the determined buffer
+    if l:target_bufnr == -1 || !bufexists(l:target_bufnr) || empty(l:current_session_id)
+        echoerr "Gemini.vim: Could not identify a valid chat session buffer to save."
+        return
+    endif
+
+    " Get all lines from the target buffer
+    let l:lines = getbufline(l:target_bufnr, 1, '$')
+
+    " Remove the "Waiting for Gemini response..." line if it's the last one
+    if !empty(l:lines) && l:lines[-1] =~# '^Waiting for Gemini response\.\.\.$'
+        call remove(l:lines, -1)
+        " Also remove the blank line before it if it exists and there's content before that
+        if len(l:lines) > 0 && empty(l:lines[-1]) && len(l:lines) > 1
+             call remove(l:lines, -1)
+        endif
+    endif
+
+
+    " If the buffer is empty after cleaning, there's nothing to save
+    if empty(l:lines)
+        echo "Gemini.vim: Chat session buffer is empty. Nothing to save."
+        return
+    endif
+
+    " 2. Prepare the log directory
+    if !exists('g:gemini_ask_log_dir') || empty(g:gemini_ask_log_dir)
+        echoerr "Gemini.vim: Log directory (g:gemini_ask_log_dir) is not set. Cannot save log."
+        return
+    endif
+
+    let l:log_dir = g:gemini_ask_log_dir
+
+    " Create the directory if it doesn't exist
+    if !isdirectory(l:log_dir)
+        try
+            call mkdir(l:log_dir, 'p')
+        catch /E/
+            echoerr "Gemini.vim: Could not create log directory '" . l:log_dir . "': " . v:exception
+            return
+        endtry
+    endif
+
+    " 3. Generate the unique filename
+    " Format: gemini-chat.SESSION_ID_SHORT.YYYY-MM-DD_HH-MM-SS.log
+    let l:date_str = strftime('%Y-%m-%d_%H-%M-%S')
+    " Use a short version of the session ID for the filename
+    let l:session_id_short = l:current_session_id[:7]
+    let l:filename = 'gemini-chat.' . l:session_id_short . '.' . l:date_str . '.log'
+    let l:full_path = l:log_dir . '/' . l:filename
+
+    " 4. Save the content to the file
+    try
+        call writefile(l:lines, l:full_path, 'w')
+        echo "GeminiAsk chat session '" . l:session_id_short . "' saved to: " . l:full_path
+    catch /E/
+        echoerr "Gemini.vim: Failed to save chat log to '" . l:full_path . "': " . v:exception
+    endtry
+endfunction
+
+" Function called by the timer to auto-save all active chat sessions.
+function! gemini#AutoSaveAllChatSessions() abort
+    if !g:gemini_ask_auto_save_chat_enabled
+        " If auto-save gets disabled mid-run, stop the timer.
+        call gemini#StopChatAutoSaveTimer()
+        return
+    endif
+
+    " Iterate through all known chat buffers and save them.
+    " g:gemini_chat_buffers is expected to be a dictionary: {session_id: bufnr}
+    if exists('g:gemini_chat_buffers') && type(g:gemini_chat_buffers) == v:t_dict
+        for l:session_id in keys(g:gemini_chat_buffers)
+            " Check if the buffer still exists and is valid before saving
+            let l:bufnr = g:gemini_chat_buffers[l:session_id]
+            if bufnr(l:bufnr) == l:bufnr && bufexists(l:bufnr) && bufname(l:bufnr) =~# '^\[Gemini Chat\]'
+                " Call the existing save function for each session ID
+                " Use a try-catch block to prevent one session's error from stopping others
+                try
+                    call gemini#SaveChatLog(l:session_id)
+                catch /E/
+                    " Log the error but don't stop the auto-save process
+                    echomsg "Gemini.vim: Error auto-saving session '" . l:session_id . "': " . v:exception
+                endtry
+            else
+                " Clean up invalid entries from g:gemini_chat_buffers
+                unlet g:gemini_chat_buffers[l:session_id]
+            endif
+        endfor
+    endif
+endfunction
+
+" Function to start the auto-save timer.
+function! gemini#StartChatAutoSaveTimer() abort
+    if !g:gemini_ask_auto_save_chat_enabled
+        return "Auto-save is disabled."
+    endif
+
+    " Stop any existing timer first to prevent duplicates
+    call gemini#StopChatAutoSaveTimer()
+
+    " Start the new timer
+    let g:gemini_ask_auto_save_chat_timer_id = timer_start(g:gemini_ask_auto_save_chat_interval_ms, 'gemini#AutoSaveAllChatSessions', {'repeat': -1})
+    echomsg "Gemini.vim: Auto-saving of chat sessions enabled every " . (g:gemini_ask_auto_save_chat_interval_ms / 0) . " seconds."
+    return g:gemini_ask_auto_save_chat_timer_id
+endfunction
+
+" Function to stop the auto-save timer.
+function! gemini#StopChatAutoSaveTimer() abort
+    if g:gemini_ask_auto_save_chat_timer_id != 0
+        call timer_stop(g:gemini_ask_auto_save_chat_timer_id)
+        let g:gemini_ask_auto_save_chat_timer_id = 0
+        echomsg "Gemini.vim: Auto-saving of chat sessions stopped."
+    endif
+endfunction
+
+" Ensure timer is started/stopped based on g:gemini_ask_auto_save_chat_enabled
+" This part should be called once after plugin config is loaded,
+" or whenever g:gemini_ask_auto_save_chat_enabled changes.
+" A good place for this might be at the end of your main plugin file, or an autocommand.
 
 
 " Command handler for :GeminiChatStart

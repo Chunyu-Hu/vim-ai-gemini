@@ -31,6 +31,43 @@ if !exists('g:gemini_send_visual_selection_display_mode')
     let g:gemini_send_visual_selection_display_mode = 'popup'
 endif
 
+" Default configuration for GeminiAsk logging
+if !exists('g:gemini_ask_log_enabled')
+    let g:gemini_ask_log_enabled = 1 " Set to 0 to disable file logging
+endif
+if !exists('g:gemini_ask_log_dir')
+    " Default to a subdirectory in Vim's configuration directory (XDG Base Dir spec compliant)
+    " Or you can use expand('~/.gemini-vim-logs') for a simpler home directory approach
+    let g:gemini_ask_log_dir = empty($XDG_STATE_HOME) ? expand('~/.local/state/vim-gemini-ask') : $XDG_STATE_HOME . '/vim-gemini-ask'
+endif
+if !exists('g:gemini_ask_log_base_filename')
+    let g:gemini_ask_log_base_filename = 'chat.log'
+endif
+if !exists('g:gemini_ask_log_max_lines')
+    let g:gemini_ask_log_max_lines = 0 " Max lines per log file before rotation
+endif
+if !exists('g:gemini_ask_log_max_files')
+    let g:gemini_ask_log_max_files = 5 " Number of rotated files to keep (e.g., chat.log, chat.log.1, ..., chat.log.4)
+endif
+if !exists('g:gemini_ask_auto_save_chat_enabled')
+    let g:gemini_ask_auto_save_chat_enabled = 0 " Set to 1 to enable auto-saving of chat sessions
+endif
+if !exists('g:gemini_ask_auto_save_chat_interval_ms')
+    " Interval in milliseconds for auto-saving. ms = 5 minutes.
+    let g:gemini_ask_auto_save_chat_interval_ms = 60000
+endif
+if !exists('g:gemini_ask_auto_save_chat_timer_id')
+    " Internal variable to store the timer ID, don't set this manually
+    let g:gemini_ask_auto_save_chat_timer_id = 0
+endif
+
+augroup gemini_ask_timers
+    autocmd!
+    " Start the timer when Vim starts, if auto-save is enabled
+    autocmd VimEnter * if g:gemini_ask_auto_save_chat_enabled | call gemini#StartChatAutoSaveTimer() | endif
+    " Stop the timer when Vim exits to clean up
+    autocmd VimLeavePre * call gemini#StopChatAutoSaveTimer()
+augroup END
 
 " ============================================================================
 " Global Configuration Variables (with default values)
@@ -80,6 +117,9 @@ endif
 " Prompts the user for a question, sends it to Gemini, and displays response in new buffer.
 command! -nargs=* GeminiAsk call gemini#Ask(<f-args>)
 
+" Command to save the current GeminiAsk chat buffer.
+command! GeminiAskSaveLog call gemini#SaveAskLog()
+
 " Command: :GeminiAskVisual
 " Visually select code, then ask Gemini a question about it.
 " RESTORED '-range=%' for standard visual mode usage.
@@ -106,6 +146,9 @@ command! -range=% -nargs=* GeminiReplaceVisual call gemini#SendVisualSelectionRe
 " Command: :GeminiChatStart
 " Starts a new Gemini chat session and opens a dedicated chat buffer.
 command! -nargs=0 GeminiChatStart call gemini#StartChat()
+
+" Command to save the current GeminiAsk chat buffer.
+command! -nargs=? GeminiAskSaveChat call gemini#SaveChatLog(<f-args>)
 
 " Command: :GeminiChatSend {message}
 " Sends a message to the currently active Gemini chat session.
