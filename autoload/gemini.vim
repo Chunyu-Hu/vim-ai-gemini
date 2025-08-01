@@ -9,7 +9,10 @@
 " Global variable to store the current active chat session ID.
 " Managed by gemini#StartChat and gemini#SwitchChat.
 if !exists('g:gemini_current_chat_id')
-    let g:gemini_current_chat_id = ''
+    let g:gemini_current_chat_id = -1
+endif
+if !exists('g:gemini_chat_winid')
+    let g:gemini_chat_winid = 0
 endif
 
 " Dictionary mapping session IDs (full string) to their Vim buffer numbers.
@@ -749,8 +752,66 @@ function! s:apply_gemini_highlights() abort
     call matchadd('GeminiAIResponse', '^### Gemini:.*', -1)
 endfunction
 
+" Script-local function to setup the global winid when the chat window closes.
+function! s:setup_chat_winid(bufname) abort
+    echo "g:gemini_chat_winid:" . g:gemini_chat_winid
+    if exists('g:gemini_chat_winid') && g:gemini_chat_winid == 0
+		let l:origin_winid = win_getid()
+        exe 'silent! keepjumps rightbelow vnew ' . a:bufname
+        let g:gemini_chat_winid = win_getid()
+        call s:set_buffer_options()
+        call win_gotoid(l:origin_winid)
+    endif
+endfunction
+
+function! s:chat_winclose_handler(closed_win_id) abort
+    if a:closed_win_id == g:gemini_chat_winid
+        echomsg "Gemit chat window ID " . a:closed_win_id . " was closed!"
+        let g:gemini_chat_winid = 0
+    else
+        echomsg "A different window ID " . a:closed_win_id . " was closed."
+    endif
+endfunction
+
+augroup GeminiWinHandlers
+    " Clear existing autocmds for this augroup
+    autocmd!
+    autocmd WinClosed * call s:chat_winclose_handler(expand('<amatch>'))
+augroup END
+
+
+" Script-local function to clear the global winid when the chat window closes.
+function! s:clear_chat_winid() abort
+    if exists('g:gemini_chat_winid') && g:gemini_chat_winid != 0 && win_id2win(g:gemini_chat_winid) == 0
+        unlet g:gemini_chat_winid
+        let g:gemini_chat_winid = 0
+        " Note: Session buffers might still exist, just not displayed in a dedicated window.
+        " If you want to auto-delete them too, you'd iterate `getbufinfo()` and `bdelete`
+        " buffers matching a pattern, but this is usually not desired as it deletes history.
+    endif
+endfunction
+
+
+" Helper function to set buffer options for a Gemini chat buffer
+function! s:set_buffer_options() abort
+    setlocal buftype=nofile     " Not backed by a file
+    "setlocal nobuflisted        " Don't show in :ls or buffer lists (unless you want them visible)
+    setlocal nomodifiable       " Prevent user from typing directly
+    setlocal nowrap             " Don't wrap lines
+    setlocal nonumber           " No line numbers
+    setlocal norelativenumber   " No relative line numbers
+    setlocal nospell            " No spell check
+    setlocal foldcolumn=0       " No fold column
+    setlocal signcolumn=no      " No sign column
+    setlocal cursorline         " Highlight current line (optional)
+    setlocal filetype=markdown  " Good for AI responses.
+    " Mark this buffer as having its setup done
+    call setbufvar(bufnr('%'), 'gemini_chat_buf_setup_done', 1)
+endfunction
 
 function! s:get_chat_buffer(session_id, create_if_not_exists) abort
+    let l:bufname = '[Gemini Chat] ' . a:session_id[:7] " Use a prefix for buffer name.
+    call s:setup_chat_winid(l:bufname)
     " Check if buffer for this session ID already exists and is listed.
     if has_key(g:gemini_chat_buffers, a:session_id) && buflisted(get(g:gemini_chat_buffers, a:session_id, -1))
         return g:gemini_chat_buffers[a:session_id]
@@ -758,14 +819,13 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
 
     " If not found, create if requested.
     if a:create_if_not_exists
-        let l:bufname = '[Gemini Chat] ' . a:session_id[:7] " Use a prefix for buffer name.
-        try
             " Use :vnew to create an empty buffer in a new vertical split, then :file to name it.
-            exe 'silent! keepjumps rightbelow vnew'
-            exe 'silent! file ' . l:bufname
-
-            let l:bufnr = bufnr(l:bufname)
-            
+            "exe 'silent! keepjumps rightbelow vnew'
+        try
+            call win_gotoid(g:gemini_chat_winid)
+            exe 'enew'
+            exe 'file ' . l:bufname
+            let l:bufnr = bufnr('%')
             if l:bufnr == -1
                 let l:bufnr = bufnr('%')
                 if bufname(l:bufnr) !=# l:bufname
@@ -773,7 +833,6 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
                     return -1
                 endif
             endif
-
             " If a buffer was successfully created and identified.
             if l:bufnr != -1
                 " Set buffer options for a scratch buffer. Keeping only essential ones that should always work.
@@ -785,6 +844,7 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
                 call setbufvar(l:bufnr, 'gemini_session_id', a:session_id)
                 " Store bufnr in global map.
                 let g:gemini_chat_buffers[a:session_id] = l:bufnr
+                call append(0, ["Gemini Chat Session: " . a:session_id, "buffer ". l:bufnr, "Waiting for Gemini response...", ""])
                 return l:bufnr
             endif
         catch
@@ -805,6 +865,12 @@ function! gemini#StartChat() abort
         let g:gemini_current_chat_id = l:result.session_id
         echo "New Gemini chat session started: " . g:gemini_current_chat_id[:7]
         " Create and switch to the new chat buffer.
+        let l:original_winid = win_getid()
+        if g:gemini_chat_winid == 0 || win_id2win(g:gemini_chat_winid) == 0
+            exe 'silent! keepjumps rightbelow vnew'
+            let g:gemini_chat_winid = win_getid()
+        endif
+        call win_gotoid(l:original_winid)
         let l:bufnr = s:get_chat_buffer(g:gemini_current_chat_id, 1)
         if l:bufnr != -1
             exe 'buffer ' . l:bufnr
@@ -824,13 +890,22 @@ function! gemini#SendMessage(message_text) abort
         echoerr "No active Gemini chat session. Use :GeminiChatStart first."
         return
     endif
-    
+    let l:original_winid = win_getid()
+    "if g:gemini_chat_winid == 0 || win_id2win(g:gemini_chat_winid) == 0
+    "    exe 'silent! keepjumps rightbelow vnew'
+    "    let g:gemini_chat_winid = win_getid()
+    "endif
     let l:bufnr = s:get_chat_buffer(g:gemini_current_chat_id, 0)
-    
     if l:bufnr == -1
         echoerr "Gemini Chat Error: The chat buffer for session '" . g:gemini_current_chat_id[:7] . "' is not active."
         echoerr "It might have been closed. Please start a new session with :GeminiChatStart, or try :GeminiChatSwitch " . g:gemini_current_chat_id[:7] . " if you believe it's still open."
         return
+    endif
+
+    " Setup an autocommand to clear g:gemini_chat_winid when this main chat window closes.
+    let l:chat_bufnr_of_window = winbufnr(g:gemini_chat_winid)
+    if l:chat_bufnr_of_window != -1
+        exe 'autocmd BufUnload <buffer=' . l:chat_bufnr_of_window . '> ++once call s:clear_chat_winid()'
     endif
 
     let l:current_win = winnr()
@@ -896,7 +971,10 @@ function! gemini#SendMessage(message_text) abort
     call s:apply_gemini_highlights()
 
     " Return to original buffer and position.
-    exe l:current_win . 'wincmd w'
+    " Return to the original window if desired
+    if win_id2win(l:original_winid) != 0 && win_getid() != l:original_winid
+        call win_gotoid(l:original_winid)
+    endif
     exe 'buffer ' . l:current_buf
     call setpos('.', l:current_pos) " Restore cursor position.
 endfunction
@@ -916,7 +994,6 @@ function! gemini#SendVisualSelectionToChat(...) abort range
         echo ""
     endif
 
-    " Simplify the combined prompt: just concatenate, no markdown fences.
     let l:combined_prompt_for_gemini = ''
 
     if !empty(l:user_prompt_text)
@@ -980,9 +1057,10 @@ function! gemini#SwitchChat(session_id_prefix) abort
         echoerr "Session ID prefix '" . a:session_id_prefix . "' not found."
         return
     endif
-
+    let l:original_winid = win_getid()
     let l:bufnr = s:get_chat_buffer(l:full_id, 0)
     if l:bufnr != -1
+        call win_gotoid(g:gemini_chat_winid)
         exe 'buffer ' . l:bufnr
         let g:gemini_current_chat_id = l:full_id
         echo "Switched to chat session: " . l:full_id[:7]
