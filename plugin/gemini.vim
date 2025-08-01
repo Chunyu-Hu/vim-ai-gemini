@@ -11,6 +11,18 @@ if !exists('g:gemini_popup_id')
   let g:gemini_popup_id = -1
 endif
 
+
+if !exists('g:gemini_replacements')
+let g:gemini_replacements = {
+    \ 'TODO': 'Action Item',
+    \ 'FIXME': 'Correction Needed',
+    \ 'deprecated': 'legacy_code',
+    \ 'user': 'customer',
+    \ 'password': 'access_token',
+    \ 'sensitive_data': 'confidential_information',
+    \ }
+endif
+
 " Configuration Variables (place these in your init.vim/init.lua)
 " g:gemini_default_model: already assumed to exist
 if !exists('g:gemini_send_visual_selection_prompt_template')

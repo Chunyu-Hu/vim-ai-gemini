@@ -305,6 +305,43 @@ function! gemini#Ask(...) abort
     endif
 endfunction
 
+" Description: Applies configured word replacements to a given string.
+"              It uses the global dictionary g:gemini_replacements, which
+"              should map old words to new words (e.g., {'foo': 'bar'}).
+" Arguments:
+"   a:text: The string to which the replacements will be applied.
+" Returns:
+"   The processed string with replacements applied, or the original string
+"   if g:gemini_replacements is not defined or is not a dictionary.
+" ==============================================================================
+function! gemini#ApplyWordReplacements(text) abort
+    " Create a temporary variable to hold the processed text.
+    " Initialize it with the input argument.
+    let l:processed_text = a:text
+
+    " Check if the global replacement dictionary exists and is actually a dictionary.
+    if exists('g:gemini_replacements') && type(g:gemini_replacements) == v:t_dict
+        " Iterate over each old word (key) in the g:gemini_replacements dictionary.
+        for l:old_word in keys(g:gemini_replacements)
+            let l:new_word = g:gemini_replacements[l:old_word]
+
+            " Create a regex pattern for whole word replacement.
+            " '\V' makes subsequent characters non-magic, so escape() only needs to handle '\'
+            " '\<' and '\>' are word boundaries for whole word matching
+            " escape(l:old_word, '\') ensures that special regex characters in l:old_word
+            " are treated literally.
+            let l:pattern = '\V\<' . escape(l:old_word, '\') . '\>'
+
+            " Perform the global replacement within l:processed_text.
+            " 'g' flag ensures all occurrences are replaced.
+            let l:processed_text = substitute(l:processed_text, l:pattern, l:new_word, 'g')
+        endfor
+    endif
+
+    " Return the processed text (or the original text if no replacements were applied).
+    return l:processed_text
+endfunction
+
 " Command handler for :GeminiAskVisual
 function! gemini#AskVisual(...) abort range
     let l:current_win_id = win_getid()
@@ -352,16 +389,16 @@ function! gemini#AskVisual(...) abort range
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "Code:\n"
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_code . "\n"
     endif
-
+    let l:processed_lines = gemini#ApplyWordReplacements(l:combined_prompt_for_gemini)
     echo "Sending combined prompt and code to Gemini " . g:model_info
     
     " Call Python to generate content using the combined prompt.
-    let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
+    let l:response = gemini#GenerateContent(l:processed_lines, g:gemini_default_model)
 
     if !empty(l:response)
         " Update the Ask buffer with the *full combined prompt* (including code) and Gemini's response.
         echo "Gemini response received."
-        call s:update_ask_buffer(l:combined_prompt_for_gemini, l:response, 'markdown')
+        call s:update_ask_buffer(l:processed_lines, l:response, 'markdown')
     else
         echoerr "Gemini did not return a response."
     endif
@@ -395,13 +432,14 @@ function! gemini#SendVisualSelection() abort range
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "Code:\n"
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_code . "\n"
     endif
+    let l:processed_lines = gemini#ApplyWordReplacements(l:combined_prompt_for_gemini)
     echo "Sending selected text to Gemini " . g:model_info
 
-    let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
+    let l:response = gemini#GenerateContent(l:processed_lines, g:gemini_default_model)
 
     if !empty(l:response)
         " Keeping s:display_in_new_buffer for these as they are transient.
-        call s:update_ask_buffer(l:selected_text, l:response, 'markdown')
+        call s:update_ask_buffer(l:processed_lines, l:response, 'markdown')
         echo "Gemini response received in new buffer."
     else
         echoerr "Gemini did not return a response."
@@ -429,11 +467,12 @@ function! gemini#SendBuffer() abort
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:buffer_content . "\n"
     endif
     echo "Sending entire buffer to Gemini" . g:model_info
-    let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
+    let l:processed_lines = gemini#ApplyWordReplacements(l:combined_prompt_for_gemini)
+    let l:response = gemini#GenerateContent(l:processed_lines, g:gemini_default_model)
 
     if !empty(l:response)
         " Keeping s:display_in_new_buffer for these as they are transient.
-        call s:update_ask_buffer(l:buffer_content, l:response, 'markdown')
+        call s:update_ask_buffer(l:processed_lines, l:response, 'markdown')
         echo "Gemini response received in new buffer."
     else
         echoerr "Gemini did not return a response."
@@ -682,9 +721,10 @@ function! gemini#SendVisualSelection() abort range
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n"
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_text . "\n"
     endif
+    let l:processed_lines = gemini#ApplyWordReplacements(l:combined_prompt_for_gemini)
 
     " Apply the prompt template
-    let l:final_prompt = substitute(g:gemini_send_visual_selection_prompt_template, '{text}', l:combined_prompt_for_gemini, 'g')
+    let l:final_prompt = substitute(g:gemini_send_visual_selection_prompt_template, '{text}', l:processed_lines, 'g')
 
 
     " Add an undo point before potentially changing the buffer or opening a new one
@@ -747,11 +787,12 @@ function! gemini#SendVisualSelectionReplace(...) abort range
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . "\n"
         let l:combined_prompt_for_gemini = l:combined_prompt_for_gemini . l:selected_text . "\n"
     endif
+    let l:processed_lines = gemini#ApplyWordReplacements(l:combined_prompt_for_gemini)
 
     echo "Sending selected text to Gemini for replacement" . g:model_info
 
     " Call the Python function.
-    let l:response = gemini#GenerateContent(l:combined_prompt_for_gemini, g:gemini_default_model)
+    let l:response = gemini#GenerateContent(l:processed_lines, g:gemini_default_model)
 
     if !empty(l:response)
         " Delete the current visual selection.
@@ -828,10 +869,7 @@ endfunction
 
 function! s:chat_winclose_handler(closed_win_id) abort
     if a:closed_win_id == g:gemini_chat_winid
-        echomsg "Gemit chat window ID " . a:closed_win_id . " was closed!"
         let g:gemini_chat_winid = 0
-    else
-        echomsg "A different window ID " . a:closed_win_id . " was closed."
     endif
 endfunction
 
@@ -1252,7 +1290,8 @@ endfunction
 " Command handler for :GeminiChatSendBuffer
 function! gemini#SendBufferToChat() abort
     let l:buffer_content = join(getline(1, '$'), "\n")
-    call gemini#SendMessage(l:buffer_content)
+    let l:processed_lines = gemini#ApplyWordReplacements(l:buffer_content)
+    call gemini#SendMessage(l:processed_lines)
 endfunction
 
 " Command handler for :GeminiChatList
