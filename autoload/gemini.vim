@@ -972,7 +972,12 @@ function! gemini#SendFilesToChat(file_paths) abort
     endfor
 
     if l:found_files > 0
+        let l:input_str = input("Enter your prompt: ")
         let l:buffer_content = join(l:combined_content, "\n")
+		echo "\n"
+        if !empty(l:input_str)
+            let l:buffer_content = l:input_str . "\n" . l:buffer_content
+        endif
         let l:processed_lines = gemini#ApplyWordReplacements(l:buffer_content) " Assuming this exists
         call gemini#SendMessage(l:processed_lines) " Assuming this exists
         echo printf("Sent content of %d file(s) to chat.", l:found_files)
