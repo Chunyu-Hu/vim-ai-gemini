@@ -11,6 +11,9 @@ if !exists('g:gemini_popup_id')
   let g:gemini_popup_id = -1
 endif
 
+if !exists('g:gemini_new_window_command')
+    let g:gemini_new_window_command = 'rightbelow vnew'
+endif
 
 if !exists('g:gemini_replacements')
 let g:gemini_replacements = {

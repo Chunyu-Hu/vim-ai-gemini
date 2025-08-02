@@ -124,7 +124,7 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
     if l:target_bufnr == -1 || !bufexists(l:target_bufnr) || bufname(l:target_bufnr) !=# '[GeminiAsk Result]' || !buflisted(l:target_bufnr)
         let l:bufname = '[GeminiAsk Result]'
         " Always create in a vertical split.
-        exe 'silent! keepjumps rightbelow vnew'
+        exe 'silent! keepjumps ' . g:gemini_new_window_command
         exe 'silent! file ' . l:bufname
         let l:target_bufnr = bufnr('%')
         if l:target_bufnr == -1
@@ -491,7 +491,7 @@ function! s:display_in_new_buffer(content, filetype_arg) abort
     let l:original_pos = getpos('.')
 
     " Use :vnew to create a new vertical split for the response.
-    exe 'silent! keepjumps rightbelow vnew'
+    exe 'silent! keepjumps ' . g:gemini_new_window_command
     
     " Set buffer options for the response buffer.
     setlocal buftype=nofile
@@ -859,7 +859,7 @@ endfunction
 function! s:setup_chat_winid(bufname) abort
     if exists('g:gemini_chat_winid') && g:gemini_chat_winid == 0
 		let l:origin_winid = win_getid()
-        exe 'silent! keepjumps rightbelow vnew ' . a:bufname
+        exe 'silent! keepjumps ' .  g:gemini_new_window_command . ' ' . a:bufname
         let g:gemini_chat_winid = win_getid()
         call s:set_buffer_options()
         call win_gotoid(l:origin_winid)
@@ -1192,7 +1192,7 @@ function! gemini#StartChat() abort
         " Create and switch to the new chat buffer.
         let l:original_winid = win_getid()
         if g:gemini_chat_winid == 0 || win_id2win(g:gemini_chat_winid) == 0
-            exe 'silent! keepjumps rightbelow vnew'
+            exe 'silent! keepjumps ' . g:gemini_new_window_command
             let g:gemini_chat_winid = win_getid()
         endif
         call win_gotoid(l:original_winid)
