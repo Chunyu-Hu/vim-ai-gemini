@@ -857,7 +857,6 @@ endfunction
 
 " Script-local function to setup the global winid when the chat window closes.
 function! s:setup_chat_winid(bufname) abort
-    echo "g:gemini_chat_winid:" . g:gemini_chat_winid
     if exists('g:gemini_chat_winid') && g:gemini_chat_winid == 0
 		let l:origin_winid = win_getid()
         exe 'silent! keepjumps rightbelow vnew ' . a:bufname
@@ -923,8 +922,8 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
             "exe 'silent! keepjumps rightbelow vnew'
         try
             call win_gotoid(g:gemini_chat_winid)
-            exe 'enew'
-            exe 'file ' . l:bufname
+            exe 'silent enew'
+            exe 'silent file ' . l:bufname
             let l:bufnr = bufnr('%')
             if l:bufnr == -1
                 let l:bufnr = bufnr('%')
