@@ -943,7 +943,7 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
                 call setbufvar(l:bufnr, 'gemini_session_id', a:session_id)
                 " Store bufnr in global map.
                 let g:gemini_chat_buffers[a:session_id] = l:bufnr
-                call append(0, ["Gemini Chat Session: " . a:session_id, "buffer ". l:bufnr, "Waiting for Gemini response...", ""])
+                call append(0, ["Gemini Chat Session: " . a:session_id])
                 return l:bufnr
             endif
         catch
@@ -1200,7 +1200,7 @@ function! gemini#StartChat() abort
         if l:bufnr != -1
             exe 'buffer ' . l:bufnr
             " Add a welcome message.
-            call append(0, ["# Gemini Chat Session " . g:gemini_current_chat_id[:7], "---", ""])
+            call append(0, ["# Gemini Chat Session " . g:gemini_current_chat_id[:7], "---"])
             setlocal nomodified
         endif
     else
