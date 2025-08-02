@@ -175,6 +175,8 @@ command! -range=% -nargs=* GeminiChatSendVisual call gemini#SendVisualSelectionT
 " Sends the entire current buffer content as a message to the current chat session.
 command! -nargs=0 GeminiChatSendBuffer call gemini#SendBufferToChat()
 
+command! -nargs=* GeminiChatSendFiles call gemini#SendFilesOrPrompt(<f-args>)
+
 " Command: :GeminiChatList
 " Lists all active chat sessions.
 command! -nargs=0 GeminiChatList call gemini#ListChats()

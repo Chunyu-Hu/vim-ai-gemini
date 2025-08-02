@@ -955,6 +955,58 @@ function! s:get_chat_buffer(session_id, create_if_not_exists) abort
     return -1
 endfunction
 
+" Function to send content of multiple files to chat
+function! gemini#SendFilesToChat(file_paths) abort
+    let l:combined_content = []
+    let l:found_files = 0
+
+    for l:filepath in a:file_paths
+        let l:expanded_filepath = fnamemodify(l:filepath, ':p')
+        if filereadable(l:expanded_filepath)
+            let l:found_files += 1
+            call add(l:combined_content, printf("--- Content of %s ---", fnamemodify(l:expanded_filepath, ':t')))
+            call extend(l:combined_content, readfile(l:expanded_filepath))
+            call add(l:combined_content, "")
+        else
+            echow printf("File not found or unreadable: %s", l:filepath)
+        endif
+    endfor
+
+    if l:found_files > 0
+        let l:buffer_content = join(l:combined_content, "\n")
+        let l:processed_lines = gemini#ApplyWordReplacements(l:buffer_content) " Assuming this exists
+        call gemini#SendMessage(l:processed_lines) " Assuming this exists
+        echo printf("Sent content of %d file(s) to chat.", l:found_files)
+    else
+        echo "No valid files found to send."
+    endif
+endfunction
+
+
+" New function: Send files based on arguments, or prompt if no arguments
+function! gemini#SendFilesOrPrompt(...) abort
+    let l:file_paths_to_send = []
+
+    if a:0 > 0
+        " Arguments were provided, treat them as file paths
+        let l:file_paths_to_send = a:000
+    else
+        " No arguments, prompt the user for file paths
+        let l:input_str = input("Enter file paths (space-separated): ")
+
+        if empty(l:input_str)
+            echo "Canceled or no file paths entered."
+            return
+        endif
+
+        " Split the input string by spaces to get a list of paths
+        let l:file_paths_to_send = split(l:input_str, ' ')
+    endif
+
+    " Call the existing function to handle the actual sending
+    call gemini#SendFilesToChat(l:file_paths_to_send)
+endfunction
+
 " Function to save a Gemini chat session buffer to a log file.
 " The file name will be gemini-chat.$(session_id).YYYY-MM-DD_HH-MM-SS.log
 "
