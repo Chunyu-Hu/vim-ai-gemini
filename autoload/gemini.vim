@@ -350,7 +350,14 @@ function! gemini#SaveAskLog() abort
     " 3. Generate the unique filename
     " Format: gemini-ask.YYYY-MM-DD_HH-MM-SS.log
     let l:date_str = strftime('%Y-%m-%d_%H-%M-%S')
-    let l:filename = 'gemini-ask.' . l:date_str . '.log'
+    let l:note = input("Extra note(will be added in filename): ")
+    echo '\n'
+    if empty(l:note)
+        let l:filename = 'gemini-ask.' . l:date_str . '.log'
+    else
+        let l:note = substitute(l:note, ' ', '_', 'g')
+        let l:filename = 'gemini-ask.' . l:date_str . '.' . l:note . '.log'
+    endif
     let l:full_path = l:log_dir . '/' . l:filename
 
     " 4. Save the content to the file
