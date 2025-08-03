@@ -61,7 +61,7 @@ endif
 " Default: '<TIMESTAMP><MARKER><ROLENAME><ROLEPROMPT>'
 " This will result in: '[2024-01-23 14:35:01] #### Tom:'
 if !exists('g:chat_prefix_style')
-    let g:chat_prefix_style = '<TIMESTAMP><MARKER><ROLENAME><ROLEPROMPT>'
+    let g:chat_prefix_style = '<MARKER><TIMESTAMP><ROLENAME><ROLEPROMPT>'
 endif
 
 if !exists('g:gemini_replacements')
