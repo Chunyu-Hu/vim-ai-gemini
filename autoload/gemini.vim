@@ -1450,3 +1450,26 @@ function! gemini#EndChat(session_id_prefix) abort
         echoerr "Failed to end chat: " . l:result.error
     endif
 endfunction
+
+" Function to end all active Gemini chat sessions
+function! gemini#EndAllChatSessions() abort
+	" Get a copy of all current session IDs.
+	" We copy it because gemini#EndChat modifies g:gemini_chat_buffers
+	" (by removing the key), and iterating directly over keys() while
+	" modifying can lead to unexpected behavior (e.g., skipping items).
+	let l:all_session_ids = copy(keys(g:gemini_chat_buffers))
+
+	if empty(l:all_session_ids)
+		echom "No active Gemini chat sessions to close."
+		return
+	endif
+
+	echom "Closing " . len(l:all_session_ids) . " Gemini chat sessions..."
+	for l:id in l:all_session_ids
+		" Call the existing function to end each session
+		" gemini#EndChat expects a prefix, but if l:id is the full ID,
+		" it will match itself.
+		call gemini#EndChat(l:id)
+	endfor
+	echom "All Gemini chat sessions closed."
+endfunction

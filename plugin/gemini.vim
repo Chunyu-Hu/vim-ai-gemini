@@ -133,6 +133,24 @@ augroup gemini_ask_timers
     autocmd VimLeavePre * call gemini#StopChatAutoSaveTimer()
 augroup END
 
+" Autocommand group to manage Gemini cleanup tasks
+" Clear any existing autocommands in this group to prevent duplicates if sourced multiple times
+augroup GeminiChatCleanup
+	autocmd!
+	" When Vim is about to leave, call the function to end all sessions
+	autocmd VimLeavePre * call gemini#EndAllChatSessions()
+augroup END
+
+" Autocommand group for Gemini auto-save on exit
+augroup GeminiAutoSaveOnExit
+    " Clear existing autocommands in this group to prevent duplicates
+    autocmd!
+    " When Vim is about to exit (VimLeavePre),
+    " call the auto-save function for all chat sessions.
+    " The function itself contains the check for g:gemini_ask_auto_save_chat_enabled.
+    autocmd VimLeavePre * call gemini#AutoSaveAllChatSessions()
+augroup END
+
 " ============================================================================
 " Global Configuration Variables (with default values)
 " Users can override these in their .vimrc
