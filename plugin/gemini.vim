@@ -227,7 +227,7 @@ command! -range=% -nargs=* GeminiReplaceVisual call gemini#SendVisualSelectionRe
 
 " Command: :GeminiChatStart
 " Starts a new Gemini chat session and opens a dedicated chat buffer.
-command! -nargs=0 GeminiChatStart call gemini#StartChat()
+command! -nargs=* GeminiChatStart call gemini#StartChat(<f-args>)
 
 " Command to save the current GeminiAsk chat buffer.
 command! -nargs=? GeminiAskSaveChat call gemini#SaveChatLog(<f-args>)

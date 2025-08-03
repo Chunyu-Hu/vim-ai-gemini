@@ -15,6 +15,12 @@ if !exists('g:gemini_chat_winid')
     let g:gemini_chat_winid = 0
 endif
 
+" Global dictionary to store session notes/names by ID
+" Initialize it if it doesn't exist (e.g., in your plugin's autocmd or ftplugin)
+if !exists('g:gemini_session_notes')
+    let g:gemini_session_notes = {}
+endif
+
 " Dictionary mapping session IDs (full string) to their Vim buffer numbers.
 " Used to manage and locate chat buffers.
 if !exists('g:gemini_chat_buffers')
@@ -940,50 +946,83 @@ function! s:set_buffer_options() abort
     call setbufvar(bufnr('%'), 'gemini_chat_buf_setup_done', 1)
 endfunction
 
-function! s:get_chat_buffer(session_id, create_if_not_exists) abort
-    let l:bufname = '[Gemini Chat] ' . a:session_id[:7] " Use a prefix for buffer name.
+function! s:get_chat_buffer(session_id, session_note, create_if_not_exists) abort
+    " Construct the base buffer name using the session ID.
+    let l:base_bufname = '[Gemini Chat] ' . a:session_id[:7]
+
+    " Add the session note to the buffer name if it exists.
+    let l:bufname = l:base_bufname
+    if !empty(a:session_note)
+        " Truncate the note for the buffer name to keep it manageable
+        " (e.g., max 40 characters for the note part + '...')
+        let l:display_note = a:session_note
+        if len(l:display_note) > 40
+            let l:display_note = strpart(l:display_note, 0, 37) . '...'
+        endif
+        let l:bufname = l:base_bufname . ' - ' . l:display_note
+    endif
     call s:setup_chat_winid(l:bufname)
+
     " Check if buffer for this session ID already exists and is listed.
+    " We use g:gemini_chat_buffers as the canonical source for existing buffers
+    " linked to a session ID, regardless of their current displayed name.
     if has_key(g:gemini_chat_buffers, a:session_id) && buflisted(get(g:gemini_chat_buffers, a:session_id, -1))
+        " If an existing buffer for this session_id is found, return its bufnr.
+        " We don't attempt to rename an existing buffer here;
+        " the new name will only apply when a buffer is first created.
         return g:gemini_chat_buffers[a:session_id]
     endif
 
     " If not found, create if requested.
     if a:create_if_not_exists
-            " Use :vnew to create an empty buffer in a new vertical split, then :file to name it.
-            "exe 'silent! keepjumps rightbelow vnew'
         try
+            " Ensure we are in the dedicated chat window before creating the buffer
+            " to correctly associate the new buffer with that window.
+            " This assumes g:gemini_chat_winid is already set up (e.g., by s:setup_chat_winid).
             call win_gotoid(g:gemini_chat_winid)
+
+            " Create a new empty buffer and immediately set its name.
             exe 'silent enew'
             exe 'silent file ' . l:bufname
-            let l:bufnr = bufnr('%')
-            if l:bufnr == -1
-                let l:bufnr = bufnr('%')
-                if bufname(l:bufnr) !=# l:bufname
-                    echoerr "Gemini.vim: Internal error - could not create unique chat buffer."
-                    return -1
-                endif
+            let l:bufnr = bufnr('%') " Get the buffer number of the newly created and named buffer.
+
+            " Basic sanity check if buffer number is valid.
+            if l:bufnr == -1 || bufname(l:bufnr) !=# l:bufname
+                echoerr "Gemini.vim: Internal error - could not create or name chat buffer correctly."
+                return -1
             endif
+
             " If a buffer was successfully created and identified.
             if l:bufnr != -1
-                " Set buffer options for a scratch buffer. Keeping only essential ones that should always work.
+                " Set buffer options for a scratch buffer.
                 call setbufvar(l:bufnr, '&buftype', 'nofile')      " Marks as not a real file.
-                "call setbufvar(l:bufnr, '&bufhidden', 'delete')   " Deletes buffer when no windows show it.
                 call setbufvar(l:bufnr, '&filetype', 'markdown')  " Sets syntax highlighting.
-                
+                call setbufvar(l:bufnr, '&buflisted', 1)           " Ensure it appears in :ls
+                call setbufvar(l:bufnr, '&swapfile', 0)            " Don't create swap file
+
                 " Store session ID in buffer-local variable for context.
                 call setbufvar(l:bufnr, 'gemini_session_id', a:session_id)
-                " Store bufnr in global map.
+                " The session note is already set in b:gemini_session_note by StartChat.
+
+                " Store bufnr in global map for quick lookup by session ID.
                 let g:gemini_chat_buffers[a:session_id] = l:bufnr
+
+                " --- IMPORTANT ---
+                " Remove the welcome message generation from here.
+                " The gemini#StartChat function already handles adding the welcome messages
+                " including the note, which is the correct place as it has the full context.
+                " Original line: call append(0, ["Gemini Chat Session: " . a:session_id])
+                " This will now be handled by gemini#StartChat.
                 call append(0, ["Gemini Chat Session: " . a:session_id])
+
                 return l:bufnr
             endif
         catch
-            echo "DEBUG: Error during buffer creation in s:get_chat_buffer: " . v:exception
-            let l:bufnr = -1
+            echoerr "Error creating Gemini chat buffer: " . v:exception
+            return -1
         endtry
     endif
-    return -1
+    return -1 " Return -1 if buffer not found and not created.
 endfunction
 
 " Function to send content of multiple files to chat
@@ -1239,13 +1278,27 @@ endfunction
 
 
 " Command handler for :GeminiChatStart
-function! gemini#StartChat() abort
+" Accepts any number of arguments, which will be joined into the session note
+function! gemini#StartChat(...) abort
+    " Join all arguments (a: is a List of all arguments) into a single string.
+    " If no arguments are provided (a:0 is 0), a: is an empty list [],
+    " and join([], ' ') correctly returns an empty string ''.
+    let l:session_note = join(a:000, ' ')
+
     let l:result = s:call_python_and_parse_response(
                 \ printf("gemini_api_handler.start_gemini_chat_session('%s')", g:gemini_api_key_source))
 
     if l:result.success
         let g:gemini_current_chat_id = l:result.session_id
-        echo "New Gemini chat session started: " . g:gemini_current_chat_id[:7]
+
+        " Store the note globally linked to the session ID
+        if !empty(l:session_note)
+            let g:gemini_session_notes[g:gemini_current_chat_id] = l:session_note
+            echo "New Gemini chat session started: " . g:gemini_current_chat_id[:7] . " ('" . l:session_note . "')"
+        else
+            echo "New Gemini chat session started: " . g:gemini_current_chat_id[:7]
+        endif
+
         " Create and switch to the new chat buffer.
         let l:original_winid = win_getid()
         if g:gemini_chat_winid == 0 || win_id2win(g:gemini_chat_winid) == 0
@@ -1253,11 +1306,25 @@ function! gemini#StartChat() abort
             let g:gemini_chat_winid = win_getid()
         endif
         call win_gotoid(l:original_winid)
-        let l:bufnr = s:get_chat_buffer(g:gemini_current_chat_id, 1)
+        let l:bufnr = s:get_chat_buffer(g:gemini_current_chat_id, l:session_note, 1)
         if l:bufnr != -1
             exe 'buffer ' . l:bufnr
-            " Add a welcome message.
-            call append(0, ["# Gemini Chat Session " . g:gemini_current_chat_id[:7], "---"])
+
+            " Store the note on the buffer local variables as well
+            " This makes it easy to retrieve if you're in that buffer later
+            if !empty(l:session_note)
+                let b:gemini_session_note = l:session_note
+            endif
+
+            " Add welcome messages including the note
+            let l:welcome_lines = ["# Gemini Chat Session " . g:gemini_current_chat_id[:7]]
+            if !empty(l:session_note)
+                let l:welcome_lines[0] = l:welcome_lines[0] . "# Note: " . l:session_note
+                "call add(l:welcome_lines, "# Note: " . l:session_note)
+            endif
+            call add(l:welcome_lines, "---")
+
+            call append(0, l:welcome_lines)
             setlocal nomodified
         endif
     else
@@ -1277,7 +1344,7 @@ function! gemini#SendMessage(message_text) abort
     "    exe 'silent! keepjumps rightbelow vnew'
     "    let g:gemini_chat_winid = win_getid()
     "endif
-    let l:bufnr = s:get_chat_buffer(g:gemini_current_chat_id, 0)
+    let l:bufnr = s:get_chat_buffer(g:gemini_current_chat_id, '', 0)
     if l:bufnr == -1
         echoerr "Gemini Chat Error: The chat buffer for session '" . g:gemini_current_chat_id[:7] . "' is not active."
         echoerr "It might have been closed. Please start a new session with :GeminiChatStart, or try :GeminiChatSwitch " . g:gemini_current_chat_id[:7] . " if you believe it's still open."
@@ -1427,7 +1494,7 @@ function! gemini#SwitchChat(session_id_prefix) abort
         return
     endif
     let l:original_winid = win_getid()
-    let l:bufnr = s:get_chat_buffer(l:full_id, 0)
+    let l:bufnr = s:get_chat_buffer(l:full_id, '', 0)
     if l:bufnr != -1
         call win_gotoid(g:gemini_chat_winid)
         exe 'buffer ' . l:bufnr
