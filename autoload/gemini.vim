@@ -160,6 +160,63 @@ function! gemini#GenerateContent(prompt, model_name) abort
     endif
 endfunction
 
+function! s:seperate_chat_content(bufnr) abort
+    " Adds a separator (---) at the beginning of the specified buffer
+    " if the buffer already contains content.
+    " Handles various Vim/Neovim versions for line counting.
+
+    let l:target_bufnr = a:bufnr
+    " Save the current buffer number
+    let l:current_bufnr = bufnr('%')
+    if l:current_bufnr != l:target_bufnr
+        " Only proceed if the target buffer is valid and can be switched to.
+        " Use silent! noautocmd to prevent error messages and disruptive autocommands.
+        silent! noautocmd execute 'buffer ' . l:target_bufnr
+    endif
+
+    " Verify we successfully switched to the target buffer.
+    " This is crucial because append() operates on the current buffer.
+    if bufnr('%') == l:target_bufnr
+        let l:should_add_separator = v:false
+
+        " Add a separator before previous conversations, but only if there's existing content.
+        " Using getbufinfo() and its 'linecount' field for robustness.
+        if exists('*getbufinfo')
+            let l:buf_info = getbufinfo(l:target_bufnr)
+            " Check if getbufinfo found the buffer and it has lines.
+            if !empty(l:buf_info) && get(l:buf_info[0], 'linecount', 0) > 0
+                let l:should_add_separator = v:true
+            endif
+        else
+            " Fallback if getbufinfo() is not available (should be in Vim 7.4+).
+            " Use linecount() function as a highly compatible alternative.
+            if exists('*linecount')
+                " linecount() can take a buffer number, so it's robust here.
+                if linecount(l:target_bufnr) > 0
+                    let l:should_add_separator = v:true
+                endif
+            else
+                " Absolute fallback if neither exist: check visual lines of the *current* buffer.
+                " This implicitly relies on the buffer switch above being successful.
+                if !empty(getline(1, '$'))
+                    let l:should_add_separator = v:true
+                endif
+            endif
+        endif
+
+        if l:should_add_separator
+            " Add separator at top (line 0).
+            call append(0, ["", "---", ""])
+        endif
+    endif
+
+    " Restore the original buffer if we switched away from it.
+    " Use silent! noautocmd for a clean return.
+    if l:current_bufnr != bufnr('%')
+        silent! noautocmd execute 'buffer ' . l:current_bufnr
+    endif
+endfunction
+
 " Manages a single, persistent buffer for GeminiAsk results.
 function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
     if empty(a:prompt_text) && empty(a:response_text)
