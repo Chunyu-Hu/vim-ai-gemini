@@ -15,6 +15,55 @@ if !exists('g:gemini_new_window_command')
     let g:gemini_new_window_command = 'rightbelow vnew'
 endif
 
+" ==============================================================================
+"                           Chat Formatting Configuration
+" ==============================================================================
+" Set to 1 to enable timestamps before chat messages (e.g., [YYYY-MM-DD HH:MM:SS])
+" Set to 0 to disable timestamps.
+if !exists('g:chat_timestamp_enabled')
+    let g:chat_timestamp_enabled = 0
+endif
+
+" Customize the role name for user messages.
+" Default: 'User'
+if !exists('g:chat_user_role_name')
+    let g:chat_user_role_name = 'User'
+endif
+
+" Customize the role name for Gemini (AI) messages.
+" Default: 'Gemini'
+if !exists('g:chat_gemini_role_name')
+    let g:chat_gemini_role_name = 'Gemini'
+endif
+
+" Customize the marker that appears before the role name.
+" Default: '#### ' (note the space at the end)
+" Example: To get '### Tom:', set this to '###'
+" Example: To get '--- Tom:', set this to '--- '
+if !exists('g:chat_role_prefix_marker')
+    let g:chat_role_prefix_marker = '#### '
+endif
+
+" Customize the suffix that appears after the role name.
+" Default: ':' (note the space if you want one after the colon)
+" Example: To get 'Tom ->', set this to ' ->'
+if !exists('g:chat_role_prompt_suffix')
+    let g:chat_role_prompt_suffix = ':'
+endif
+
+" Define the overall style of the chat message prefix.
+" Use placeholders:
+"   <TIMESTAMP>   : Replaced by the formatted timestamp (if enabled)
+"   <MARKER>      : Replaced by g:chat_role_prefix_marker
+"   <ROLENAME>    : Replaced by g:chat_user_role_name or g:chat_gemini_role_name
+"   <ROLEPROMPT>  : Replaced by g:chat_role_prompt_suffix
+"
+" Default: '<TIMESTAMP><MARKER><ROLENAME><ROLEPROMPT>'
+" This will result in: '[2024-01-23 14:35:01] #### Tom:'
+if !exists('g:chat_prefix_style')
+    let g:chat_prefix_style = '<TIMESTAMP><MARKER><ROLENAME><ROLEPROMPT>'
+endif
+
 if !exists('g:gemini_replacements')
 let g:gemini_replacements = {
     \ 'TODO': 'Action Item',

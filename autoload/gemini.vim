@@ -66,6 +66,53 @@ function! s:call_python_and_parse_response(python_call_string) abort
     endtry
 endfunction
 
+" ==============================================================================
+"                       Private Chat Formatting Helper Function
+" ==============================================================================
+" Define a private helper function (s:) to format chat messages.
+" It takes the message type ('User' or 'Gemini') and the raw text,
+" and returns a list of formatted lines ready to be appended to the buffer.
+function! s:get_formatted_chat_lines(message_type, message_text) abort
+    " Attempt to remove NULL bytes (^@) from the text for cleaner display.
+    let l:cleaned_text = substitute(a:message_text, '\x00', '', 'g')
+
+    let l:lines = []
+
+    " 1. Prepare values for placeholders
+    let l:timestamp_val = ''
+    if g:chat_timestamp_enabled
+        " Format: [YYYY-MM-DD HH:MM:SS] (note the trailing space in the format)
+        let l:timestamp_val = strftime('[%Y-%m-%d %H:%M:%S] ')
+    endif
+
+    let l:role_name_val = ''
+    if a:message_type == 'User'
+        let l:role_name_val = g:chat_user_role_name
+    elseif a:message_type == 'Gemini'
+        let l:role_name_val = g:chat_gemini_role_name
+    else
+        " Fallback for unexpected message types
+        let l:role_name_val = 'Unknown'
+    endif
+
+    " 2. Construct the full prefix line using the style string and substitutions
+    let l:full_prefix_line = g:chat_prefix_style
+    let l:full_prefix_line = substitute(l:full_prefix_line, '<TIMESTAMP>', l:timestamp_val, 'g')
+    let l:full_prefix_line = substitute(l:full_prefix_line, '<MARKER>', g:chat_role_prefix_marker, 'g')
+    let l:full_prefix_line = substitute(l:full_prefix_line, '<ROLENAME>', l:role_name_val, 'g')
+    let l:full_prefix_line = substitute(l:full_prefix_line, '<ROLEPROMPT>', g:chat_role_prompt_suffix, 'g')
+
+    call add(l:lines, l:full_prefix_line)
+
+    " Split the cleaned message text into individual lines and extend the list.
+    call extend(l:lines, split(l:cleaned_text, "\n"))
+
+    " Add a blank line after the message for better readability.
+    call add(l:lines, '')
+
+    return l:lines
+endfunction
+
 " ============================================================================
 " Content Generation Functions (Single-Turn & Visual)
 " ============================================================================
@@ -148,29 +195,14 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
     endif
 
     " Remove NULL bytes from response.
-    let l:cleaned_response_text = substitute(a:response_text, '\x00', '', 'g')
+    let l:gemini_lines = s:get_formatted_chat_lines('Gemini', a:response_text)
     
     " Go to the very top of the buffer to insert new content.
     normal! gg
     
-    " Prepare lines for Gemini's response.
-    let l:gemini_lines = [
-        \ '### Gemini:',
-        \ ]
-    call extend(l:gemini_lines, split(l:cleaned_response_text, "\n"))
-    
-    " Blank line after Gemini's response.
-    call add(l:gemini_lines, '')
-
-
     " Prepare lines for User's prompt.
-    let l:user_lines = [
-        \ '### User:',
-        \ ]
-    call extend(l:user_lines, split(a:prompt_text, "\n"))
+    let l:user_lines = s:get_formatted_chat_lines('User', a:prompt_text)
     
-    " Blank line after user's prompt.
-    call add(l:user_lines, '')
     
     " Add a separator before previous conversations, but only if there's existing content.
     " Using getbufinfo() and its 'linecount' field for robustness.
@@ -1242,13 +1274,7 @@ function! gemini#SendMessage(message_text) abort
     " Switch to the chat buffer.
     exe 'buffer ' . l:bufnr
     " Append user message lines to the list of current lines.
-	let l:user_lines = [
-				\ '### User:',
-				\ ]
-    let l:cleaned_user_message = substitute(a:message_text, '\x00', '', 'g')
-	call extend(l:user_lines, split(l:cleaned_user_message, "\n"))
-    " Blank line after user's prompt.
-    call add(l:user_lines, '')
+    let l:user_lines = s:get_formatted_chat_lines('User', a:message_text)
 
     call s:apply_gemini_highlights() " Apply highlights after appending.
     
@@ -1272,15 +1298,7 @@ function! gemini#SendMessage(message_text) abort
 
     if l:result.success
         " Attempt to remove NULL bytes (^@) from the response for cleaner display.
-        let l:gemini_response_text = substitute(l:result.text, '\x00', '', 'g')
-		" Prepare lines for Gemini's response.
-		let l:gemini_lines = [
-					\ '### Gemini:',
-					\ ]
-		call extend(l:gemini_lines, split(l:gemini_response_text, "\n"))
-
-		" Blank line after Gemini's response.
-		call add(l:gemini_lines, '')
+        let l:gemini_lines = s:get_formatted_chat_lines('Gemini', l:result.text)
         " Append Gemini's response lines to the list.
         call append(1, l:gemini_lines)
         
