@@ -21,6 +21,10 @@ if !exists('g:gemini_session_notes')
     let g:gemini_session_notes = {}
 endif
 
+if !exists('g:gemini_session_create_times')
+    let g:gemini_session_create_times = {}
+endif
+
 " Dictionary mapping session IDs (full string) to their Vim buffer numbers.
 " Used to manage and locate chat buffers.
 if !exists('g:gemini_chat_buffers')
@@ -115,6 +119,11 @@ function! s:get_formatted_chat_lines(message_type, message_text) abort
 
     " Add a blank line after the message for better readability.
     call add(l:lines, '')
+    if a:message_type == 'Gemini'
+        call add(l:lines, '')
+        call add(l:lines, '---')
+        call add(l:lines, '')
+    endif
 
     return l:lines
 endfunction
@@ -206,7 +215,7 @@ function! s:seperate_chat_content(bufnr) abort
 
         if l:should_add_separator
             " Add separator at top (line 0).
-            call append(0, ["", "---", ""])
+            "call append(0, ["", "---", ""])
         endif
     endif
 
@@ -269,27 +278,7 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
     
     " Add a separator before previous conversations, but only if there's existing content.
     " Using getbufinfo() and its 'linecount' field for robustness.
-    if exists('*getbufinfo')
-        let l:buf_info = getbufinfo(l:target_bufnr)
-        " Check if getbufinfo found the buffer and it has lines.
-        if !empty(l:buf_info) && get(l:buf_info[0], 'linecount', 0) > 0
-            " Add separator at top.
-            call append(0, ["", "---", ""])
-        endif
-    else
-        " Fallback if getbufinfo() is not available (should be in Vim 7.4+).
-        " Use linecount() function as a highly compatible alternative.
-        if exists('*linecount')
-            if linecount(l:target_bufnr) > 0
-                call append(0, ["", "---", ""])
-            endif
-        else
-            " Absolute fallback if neither exist: check visual lines.
-            if !empty(getline(1, '$'))
-                call append(0, ["", "---", ""])
-            endif
-        endif
-    endif
+    call s:seperate_chat_content(l:target_bufnr)
 
     " Insert Gemini's response at the top (after separator if any).
     call append(0, l:gemini_lines)
@@ -1175,13 +1164,13 @@ function! gemini#SaveChatLog(...) abort
     " Check the number of arguments passed
     if a:0 == 1
         " If one argument is provided, use it as the session_id
-        let l:session_id = a:[0]
+        let l:session_id = a:000[0]
     elseif a:0 > 1
         " Handle cases where too many arguments are passed (optional: throw an error)
         echohl ErrorMsg | echo "Error: gemini#SaveChatLog accepts zero or one argument, but " . a:0 . " were given." | echohl None
         return
     else
-		if (g:gemini_current_chat_id > 0)
+        if !empty(g:gemini_current_chat_id)
             let l:session_id = g:gemini_current_chat_id
         endif
     endif
@@ -1258,10 +1247,23 @@ function! gemini#SaveChatLog(...) abort
 
     " 3. Generate the unique filename
     " Format: gemini-chat.SESSION_ID_SHORT.YYYY-MM-DD_HH-MM-SS.log
-    let l:date_str = strftime('%Y-%m-%d_%H-%M-%S')
+    if g:gemini_log_use_starttime
+        let l:date_str = g:gemini_session_create_times[l:session_id]
+    else
+        let l:date_str = strftime('%Y-%m-%d_%H-%M-%S')
+	endif
+	let l:session_name = ''
+    if has_key(g:gemini_session_notes, l:session_id) && !empty(g:gemini_session_notes[l:session_id])
+        let l:session_name = g:gemini_session_notes[l:session_id]
+        let l:session_name = substitute(l:session_name, ' ', '_', 'g')
+    endif
     " Use a short version of the session ID for the filename
     let l:session_id_short = l:current_session_id[:7]
-    let l:filename = 'gemini-chat.' . l:session_id_short . '.' . l:date_str . '.log'
+    if empty(l:session_name)
+        let l:filename = 'gemini-chat.' . l:session_id_short . '.' . l:date_str . '.log'
+    else
+        let l:filename = 'gemini-chat.' . l:session_id_short . '.' . l:session_name . '.' . l:date_str . '.log'
+    endif
     let l:full_path = l:log_dir . '/' . l:filename
 
     " 4. Save the content to the file
@@ -1337,9 +1339,6 @@ endfunction
 " Command handler for :GeminiChatStart
 " Accepts any number of arguments, which will be joined into the session note
 function! gemini#StartChat(...) abort
-    " Join all arguments (a: is a List of all arguments) into a single string.
-    " If no arguments are provided (a:0 is 0), a: is an empty list [],
-    " and join([], ' ') correctly returns an empty string ''.
     let l:session_note = join(a:000, ' ')
 
     let l:result = s:call_python_and_parse_response(
@@ -1348,13 +1347,26 @@ function! gemini#StartChat(...) abort
     if l:result.success
         let g:gemini_current_chat_id = l:result.session_id
 
+        " Capture and store the session creation time
+        " Format suitable for log file names (e.g., "20231027_153045")
+        let l:create_time_filename_format = strftime('%Y%m%d_%H%M%S')
+        " Format for human-readable display (e.g., "2023-10-27 15:30:45")
+        let l:create_time_display_format = strftime('%Y-%m-%d %H:%M:%S')
+
         " Store the note globally linked to the session ID
         if !empty(l:session_note)
             let g:gemini_session_notes[g:gemini_current_chat_id] = l:session_note
-            echo "New Gemini chat session started: " . g:gemini_current_chat_id[:7] . " ('" . l:session_note . "')"
-        else
-            echo "New Gemini chat session started: " . g:gemini_current_chat_id[:7]
         endif
+        " Store the creation time globally linked to the session ID
+        let g:gemini_session_create_times[g:gemini_current_chat_id] = l:create_time_filename_format
+
+        " Echo success message including the note and creation time
+        let l:echo_message = "New Gemini chat session started: " . g:gemini_current_chat_id[:7]
+        if !empty(l:session_note)
+            let l:echo_message .= " ('" . l:session_note . "')"
+        endif
+        let l:echo_message .= " at " . l:create_time_display_format
+        echo l:echo_message
 
         " Create and switch to the new chat buffer.
         let l:original_winid = win_getid()
@@ -1367,19 +1379,25 @@ function! gemini#StartChat(...) abort
         if l:bufnr != -1
             exe 'buffer ' . l:bufnr
 
-            " Store the note on the buffer local variables as well
-            " This makes it easy to retrieve if you're in that buffer later
+            " Store the note on the buffer local variables
             if !empty(l:session_note)
                 let b:gemini_session_note = l:session_note
             endif
+            " Store the creation time on the buffer local variables
+            " b:gemini_session_create_time will store the filename-friendly format
+            let b:gemini_session_create_time = l:create_time_filename_format
+            " b:gemini_session_create_time_display will store the human-readable format
+            let b:gemini_session_create_time_display = l:create_time_display_format
 
-            " Add welcome messages including the note
+            " Add welcome messages including the note and creation time
             let l:welcome_lines = ["# Gemini Chat Session " . g:gemini_current_chat_id[:7]]
             if !empty(l:session_note)
-                let l:welcome_lines[0] = l:welcome_lines[0] . "# Note: " . l:session_note
-                "call add(l:welcome_lines, "# Note: " . l:session_note)
+                let l:welcome_lines[0] = l:welcome_lines[0] . " - Note: " . l:session_note
             endif
+            let l:welcome_lines[0] = l:welcome_lines[0] . " # Created: " . l:create_time_display_format
+            call add(l:welcome_lines, "")
             call add(l:welcome_lines, "---")
+            call add(l:welcome_lines, "")
 
             call append(0, l:welcome_lines)
             setlocal nomodified
@@ -1449,7 +1467,7 @@ function! gemini#SendMessage(message_text) abort
         " Attempt to remove NULL bytes (^@) from the response for cleaner display.
         let l:gemini_lines = s:get_formatted_chat_lines('Gemini', l:result.text)
         " Append Gemini's response lines to the list.
-        call append(1, l:gemini_lines)
+        call append(2, l:gemini_lines)
         
         
         setlocal nomodified
@@ -1459,7 +1477,7 @@ function! gemini#SendMessage(message_text) abort
         echoerr "Gemini chat error: " . l:result.error
     endif
 
-    call append(1 , l:user_lines)
+    call append(2 , l:user_lines)
     call s:apply_gemini_highlights()
 
     " Return to original buffer and position.

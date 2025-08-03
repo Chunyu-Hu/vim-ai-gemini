@@ -107,6 +107,10 @@ endif
 if !exists('g:gemini_ask_log_base_filename')
     let g:gemini_ask_log_base_filename = 'chat.log'
 endif
+
+if !exists('g:gemini_log_use_starttime')
+    let g:gemini_log_use_starttime = 0
+endif
 if !exists('g:gemini_ask_log_max_lines')
     let g:gemini_ask_log_max_lines = 0 " Max lines per log file before rotation
 endif
