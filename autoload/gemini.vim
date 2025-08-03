@@ -1043,10 +1043,24 @@ function! gemini#SendFilesOrPrompt(...) abort
     call gemini#SendFilesToChat(l:file_paths_to_send)
 endfunction
 
-" Requires fzf.vim plugin
+" Requires fzf.vim plugin, use 'Tab' to mark selected file
 function! gemini#SendFzfFilesToChat() abort
+    " Check if fzf.vim is available
+    if !exists('*fzf#run')
+        echom "Error: fzf.vim plugin is required for this function."
+        echom "Please install it (e.g., using a plugin manager like Plug/Vim-Plug):"
+        echom "  Plug 'junegunn/fzf', { 'dir': '~/.fzf' }"
+        echom "  Plug 'junegunn/fzf.vim'"
+        echom "Then run :PlugInstall and restart Vim."
+        return
+    endif
+    if empty(g:gemini_current_chat_id) || g:gemini_current_chat_id < 0
+        echom "No active Gemini chat session. Use :GeminiChatStart first."
+        return
+    endif
+    " Adjust 'find' command as needed
     call fzf#run({
-        \ 'source': 'find . -maxdepth 3 -type f ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*.log" -print', " Adjust 'find' command as needed
+        \ 'source': 'find . -maxdepth 3 -type f ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*.log" -print',
         \ 'sink*': {files -> gemini#SendFilesToChat(files)},
         \ 'options': '--multi --ansi',
         \ 'down': '40%',
