@@ -1043,6 +1043,17 @@ function! gemini#SendFilesOrPrompt(...) abort
     call gemini#SendFilesToChat(l:file_paths_to_send)
 endfunction
 
+" Requires fzf.vim plugin
+function! gemini#SendFzfFilesToChat() abort
+    call fzf#run({
+        \ 'source': 'find . -maxdepth 3 -type f ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*.log" -print', " Adjust 'find' command as needed
+        \ 'sink*': {files -> gemini#SendFilesToChat(files)},
+        \ 'options': '--multi --ansi',
+        \ 'down': '40%',
+        \ 'header': 'Select files to send to chat:'
+        \ })
+endfunction
+
 " Function to save a Gemini chat session buffer to a log file.
 " The file name will be gemini-chat.$(session_id).YYYY-MM-DD_HH-MM-SS.log
 "

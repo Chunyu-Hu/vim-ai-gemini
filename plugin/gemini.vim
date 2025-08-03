@@ -247,6 +247,9 @@ command! -nargs=0 GeminiChatSendBuffer call gemini#SendBufferToChat()
 
 command! -nargs=* GeminiChatSendFiles call gemini#SendFilesOrPrompt(<f-args>)
 
+" Command to select files using FZF and send them
+command! GeminiChatSelectFiles call gemini#SendFzfFilesToChat()
+
 " Command: :GeminiChatList
 " Lists all active chat sessions.
 command! -nargs=0 GeminiChatList call gemini#ListChats()
