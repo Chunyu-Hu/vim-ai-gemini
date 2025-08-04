@@ -1,4 +1,5 @@
 ```markdown
+
 ==============================================================================
 1. INTRODUCTION                                               *gemini-intro*
 
@@ -209,6 +210,4 @@ let g:chat_speaker_roles = {
     \ 'User123_Bot': {'ctermfg': 'magenta', 'cterm': 'bold', 'guifg': '#FFFFFF', 'gui': 'bold'},
     \ 'AnotherUser': {'ctermfg': 'red',     'cterm': 'bold', 'guifg': '#FF0000', 'gui': 'bold'}
     \ }
-
-
 
