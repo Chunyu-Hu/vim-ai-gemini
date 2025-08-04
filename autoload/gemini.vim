@@ -289,7 +289,7 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
     " Go to the very top of the buffer (where new content was added).
     normal! gg
 
-    call s:apply_gemini_highlights()
+    call ApplyGeminiHighlights(g:chat_speaker_roles)
 
     " Ensure buffer is not marked as modified (for cleaner display).
     setlocal nomodified
@@ -591,7 +591,7 @@ function! s:display_in_new_buffer(content, filetype_arg) abort
     call append(0, split(a:content, "\n"))
     normal! gg
 
-    call s:apply_gemini_highlights()
+    call ApplyGeminiHighlights(g:chat_speaker_roles)
 
     " Return to original buffer and position.
     call win_gotoid(l:original_win)
@@ -909,43 +909,6 @@ function! gemini#SendVisualSelectionReplace(...) abort range
     endif
 endfunction
 
-
-" ============================================================================
-" Chat Session Functions
-" ============================================================================
-
-" Helper to define and apply custom highlighting.
-" This function MUST be called after switching to the target buffer.
-function! s:apply_gemini_highlights() abort
-    " Define custom highlight groups if they don't exist.
-    " Using default to let user's colorscheme override if desired.
-    " User Prompts
-    if !hlexists('GeminiUserPrompt')
-        highlight default GeminiUserPrompt term=bold ctermfg=cyan gui=bold guifg=#00FFFF
-    endif
-    " AI Responses
-    if !hlexists('GeminiAIResponse')
-        highlight default GeminiAIResponse term=bold ctermfg=green gui=bold guifg=#00FF00
-    endif
-    " Section Headers (like ### User: / ### Gemini:)
-    if !hlexists('GeminiHeader')
-        highlight default GeminiHeader term=bold ctermfg=yellow gui=bold guifg=#FFFF00
-    endif
-
-    " Try to clear previous matches in the current buffer to avoid accumulation.
-    " Using clearmatches() which clears all matches for the current buffer.
-    if exists('*clearmatches')
-        call clearmatches()
-    endif
-
-    " Apply matches for the specific headers in the current buffer.
-    call matchadd('GeminiHeader', '^### User:', -1)
-    call matchadd('GeminiUserPrompt', '^### User:.*', -1)
-    
-    call matchadd('GeminiHeader', '^### Gemini:', -1)
-    call matchadd('GeminiAIResponse', '^### Gemini:.*', -1)
-endfunction
-
 " Script-local function to setup the global winid when the chat window closes.
 function! s:setup_chat_winid(bufname) abort
     if exists('g:gemini_chat_winid') && g:gemini_chat_winid == 0
@@ -987,9 +950,9 @@ function! s:set_buffer_options() abort
     setlocal buftype=nofile     " Not backed by a file
     "setlocal nobuflisted        " Don't show in :ls or buffer lists (unless you want them visible)
     setlocal nomodifiable       " Prevent user from typing directly
-    setlocal nowrap             " Don't wrap lines
-    setlocal nonumber           " No line numbers
-    setlocal norelativenumber   " No relative line numbers
+    "setlocal nowrap             " Don't wrap lines
+    "setlocal nonumber           " No line numbers
+    "setlocal norelativenumber   " No relative line numbers
     setlocal nospell            " No spell check
     setlocal foldcolumn=0       " No fold column
     setlocal signcolumn=no      " No sign column
@@ -1066,7 +1029,7 @@ function! s:get_chat_buffer(session_id, session_note, create_if_not_exists) abor
                 " including the note, which is the correct place as it has the full context.
                 " Original line: call append(0, ["Gemini Chat Session: " . a:session_id])
                 " This will now be handled by gemini#StartChat.
-                call append(0, ["Gemini Chat Session: " . a:session_id])
+                "call append(0, ["Gemini Chat Session: " . a:session_id])
 
                 return l:bufnr
             endif
@@ -1401,10 +1364,10 @@ function! gemini#StartChat(...) abort
             if !empty(l:session_note)
                 let l:welcome_lines[0] = l:welcome_lines[0] . " - Note: " . l:session_note
             endif
-            let l:welcome_lines[0] = l:welcome_lines[0] . " # Created: " . l:create_time_display_format
-            call add(l:welcome_lines, "")
-            call add(l:welcome_lines, "---")
-            call add(l:welcome_lines, "")
+            let l:welcome_lines[0] = l:welcome_lines[0] . " Created: " . l:create_time_display_format
+           " call add(l:welcome_lines, "")
+           " call add(l:welcome_lines, "---")
+           " call add(l:welcome_lines, "")
 
             call append(0, l:welcome_lines)
             setlocal nomodified
@@ -1450,7 +1413,7 @@ function! gemini#SendMessage(message_text) abort
     " Append user message lines to the list of current lines.
     let l:user_lines = s:get_formatted_chat_lines('User', a:message_text)
 
-    call s:apply_gemini_highlights() " Apply highlights after appending.
+    call ApplyGeminiHighlights(g:chat_speaker_roles)
     
     setlocal nomodified
     
@@ -1474,7 +1437,7 @@ function! gemini#SendMessage(message_text) abort
         " Attempt to remove NULL bytes (^@) from the response for cleaner display.
         let l:gemini_lines = s:get_formatted_chat_lines('Gemini', l:result.text)
         " Append Gemini's response lines to the list.
-        call append(2, l:gemini_lines)
+        call append(1, l:gemini_lines)
         
         
         setlocal nomodified
@@ -1484,8 +1447,8 @@ function! gemini#SendMessage(message_text) abort
         echoerr "Gemini chat error: " . l:result.error
     endif
 
-    call append(2 , l:user_lines)
-    call s:apply_gemini_highlights()
+    call append(1 , l:user_lines)
+    call ApplyGeminiHighlights(g:chat_speaker_roles)
 
     " Return to original buffer and position.
     " Return to the original window if desired
