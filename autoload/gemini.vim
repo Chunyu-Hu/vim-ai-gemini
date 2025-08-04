@@ -14,6 +14,9 @@ endif
 if !exists('g:gemini_chat_winid')
     let g:gemini_chat_winid = 0
 endif
+if !exists('g:gemini_record_ask_history')
+    let g:gemini_record_ask_history = 1
+endif
 
 " Global dictionary to store session notes/names by ID
 " Initialize it if it doesn't exist (e.g., in your plugin's autocmd or ftplugin)
@@ -265,6 +268,12 @@ function! s:update_ask_buffer(prompt_text, response_text, filetype_arg) abort
         " Buffer already exists, just switch to it.
         exe 'buffer ' . l:target_bufnr
     endif
+    " Check g:gemini_record_ask_history. If not set or explicitly false, clear the buffer.
+    " Using get() to safely check if the variable exists and its value, defaulting to 0 (false).
+    if !get(g:, 'gemini_record_ask_history', 0)
+        " Clear existing content from the buffer
+        silent! call deletebufline(l:target_bufnr, 1, '$')
+    endif
 
     " Remove NULL bytes from response.
     let l:gemini_lines = s:get_formatted_chat_lines('Gemini', a:response_text)
@@ -460,7 +469,7 @@ function! gemini#AskVisual(...) abort range
         let l:user_prompt_text = join(a:000, ' ')
     else
         let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "): ")
-        echo '\n'
+        echo ""
     endif
 
     " Exit if user cancels or provides no prompt and no code selected.
@@ -510,7 +519,7 @@ function! gemini#SendVisualSelection() abort range
         let l:user_prompt_text = join(a:000, ' ')
     else
         let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "):")
-        echo '\n'
+        echo ""
     endif
 
     " Simplify the combined prompt: just concatenate, no markdown fences.
@@ -571,7 +580,7 @@ function! gemini#SendBuffer() abort
 endfunction
 
 " Opens a new scratch buffer and populates it with text. (This function is kept for GenerateVisual/GenerateBuffer)
-function! s:display_in_new_buffer(content, filetype_arg) abort
+function! s:display_in_new_buffer(prompt_text, content, filetype_arg) abort
     if empty(a:content)
         echo "No content to display."
         return
