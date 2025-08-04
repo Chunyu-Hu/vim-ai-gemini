@@ -360,7 +360,7 @@ function! gemini#SaveAskLog() abort
     " Format: gemini-ask.YYYY-MM-DD_HH-MM-SS.log
     let l:date_str = strftime('%Y-%m-%d_%H-%M-%S')
     let l:note = input("Extra note(will be added in filename): ")
-    echo '\n'
+    echo "\n"
     if empty(l:note)
         let l:filename = 'gemini-ask.' . l:date_str . '.log'
     else
@@ -386,7 +386,7 @@ function! gemini#Ask(...) abort
         let l:prompt = join(a:000, ' ')
     else
         let l:prompt = input("Ask Gemini (model:" . g:gemini_default_model . "): ")
-        echo '\n'
+        echo "\n"
     endif
 
     if empty(l:prompt)
@@ -469,7 +469,7 @@ function! gemini#AskVisual(...) abort range
         let l:user_prompt_text = join(a:000, ' ')
     else
         let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "): ")
-        echo ""
+        echo "\n"
     endif
 
     " Exit if user cancels or provides no prompt and no code selected.
@@ -519,7 +519,7 @@ function! gemini#SendVisualSelection() abort range
         let l:user_prompt_text = join(a:000, ' ')
     else
         let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "):")
-        echo ""
+        echo "\n"
     endif
 
     " Simplify the combined prompt: just concatenate, no markdown fences.
@@ -553,7 +553,7 @@ function! gemini#SendBuffer() abort
         let l:user_prompt_text = join(a:000, ' ')
     else
         let l:user_prompt_text = input("Ask Gemini: ")
-        echo '\n'
+        echo "\n"
     endif
 
     " Simplify the combined prompt: just concatenate, no markdown fences.
@@ -808,7 +808,7 @@ function! gemini#SendVisualSelection() abort range
         let l:user_prompt_text = join(a:000, ' ')
     else
         let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "): ")
-        echo '\n'
+        echo "\n"
     endif
 
     " Simplify the combined prompt: just concatenate, no markdown fences.
@@ -874,7 +874,7 @@ function! gemini#SendVisualSelectionReplace(...) abort range
         let l:user_prompt_text = join(a:000, ' ')
     else
         let l:user_prompt_text = input("Ask Gemini: ")
-        echo '\n'
+        echo "\n"
     endif
 
     " Simplify the combined prompt: just concatenate, no markdown fences.
@@ -1236,6 +1236,16 @@ function! gemini#SaveChatLog(...) abort
         let l:session_name = g:gemini_session_notes[l:session_id]
         let l:session_name = substitute(l:session_name, ' ', '_', 'g')
     endif
+    let l:note = input("Extra note(will be added in filename): ")
+    echo "\n"
+    if !empty(l:note)
+        let l:note = substitute(l:note, ' ', '_', 'g')
+        if !empty(l:session_name)
+            let l:session_name = l:session_name . '.' . l:note
+        else
+            let l:session_name = l:note
+        endif
+    endif
     " Use a short version of the session ID for the filename
     let l:session_id_short = l:current_session_id[:7]
     if empty(l:session_name)
@@ -1480,7 +1490,7 @@ function! gemini#SendVisualSelectionToChat(...) abort range
         let l:user_prompt_text = input("Ask Gemini(" . g:gemini_default_model . "):")
         " No need for echo '\n' here, input() handles its own output.
         " If you really want a newline *after* input clears, consider:
-        echo ""
+        echo "\n"
     endif
 
     let l:combined_prompt_for_gemini = ''
