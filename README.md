@@ -190,5 +190,16 @@ let g:gemini_log_use_starttime = 1
 let g:gemini_record_ask_history = 0
 let g:vim_markdown_folding_level = 1
 
+" Set the color of the speakers, 'g:chat_user_role_name' and 'g:chat_gemini_role_name'
+let g:chat_speaker_roles = {
+    \ 'User':         {'ctermfg': 'cyan',    'cterm': 'bold', 'guifg': '#00FFFF', 'gui': 'bold'},
+    \ 'Tom':         {'ctermfg': 'cyan',    'cterm': 'bold', 'guifg': '#00FFFF', 'gui': 'bold'},
+    \ 'AI':          {'ctermfg': 'green',   'cterm': 'bold', 'guifg': '#0000FF', 'gui': 'bold'},
+    \ 'Gemini':          {'ctermfg': 'green',   'cterm': 'bold', 'guifg': '#0000FF', 'gui': 'bold'},
+    \ 'Teacher':       {'ctermfg': 'yellow',  'cterm': 'bold', 'guifg': '#FFFFFF', 'gui': 'bold'},
+    \ 'User123_Bot': {'ctermfg': 'magenta', 'cterm': 'bold', 'guifg': '#FFFFFF', 'gui': 'bold'},
+    \ 'AnotherUser': {'ctermfg': 'red',     'cterm': 'bold', 'guifg': '#FF0000', 'gui': 'bold'}
+    \ }
+
 
 
