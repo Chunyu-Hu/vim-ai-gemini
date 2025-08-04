@@ -174,6 +174,7 @@ nnoremap <Leader>ce :GeminiChatEnd<Space>                   " End chat (prompt f
 let g:gemini_default_model = 'gemini-2.5-pro'
 "let g:gemini_api_key_source = 'GEMINI_API_KEY'
 
+" Replace some words in visual selection or buffer so protect personal/sensitive information
 let g:gemini_replacements = {
     \ 'dav': 'fruit',
     \ 'Dave': 'cloud',
