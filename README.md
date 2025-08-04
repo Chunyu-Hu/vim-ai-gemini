@@ -1,10 +1,4 @@
-*gemini.txt* A Vim plugin for Google Gemini AI interaction
-
-Author: Chunyu Hu <chuhu@redhat.com>
-Assisted-by: Gemini-2.5-flash
-Version: 0.1
-License: MIT License (see LICENSE)
-
+```markdown
 ==============================================================================
 1. INTRODUCTION                                               *gemini-intro*
 
@@ -53,7 +47,7 @@ It also supports multi-turn conversational chat sessions.
 4.  **Plugin Manager (Recommended)**:
     If you use `vim-plug`, add the following to your `init.vim` or `.vimrc`:
     ```vim
-    Plug 'your_github_username/vim-gemini-ai' " Change to your actual repo URL
+    Plug 'Chunyu-Hu/vim-ai-gemini' " Change to your actual repo URL
     ```
     Then run `:PlugInstall`.
 
@@ -117,12 +111,12 @@ remembers previous turns in the session.
     The message and Gemini's reply will be appended to the chat buffer.
     *Example*: `:GeminiChatSend "What is the capital of France?"`
 
-* `:GeminiChatSendVisual`                               *GeminiChatSendVisual*
+* `:GeminiChatSendVisual [prompt]`                      *GeminiChatSendVisual*
     In visual mode, select text. This text will be sent as a message to the
     current chat session. Useful for providing code snippets as context.
     *Example*: Select code, then `:'<,'>GeminiChatSendVisual`
 
-* `:GeminiChatSendBuffer`                               *GeminiChatSendBuffer*
+* `:GeminiChatSendBuffer [prompt]`                      *GeminiChatSendBuffer*
     Sends the entire content of the current buffer as a message to the
     current chat session.
     *Example*: `:GeminiChatSendBuffer`
@@ -174,3 +168,27 @@ vnoremap <Leader>cv :<C-u>GeminiChatSendVisual<CR>           " Send visual selec
 nnoremap <Leader>cB :GeminiChatSendBuffer<CR>               " Send buffer to chat
 nnoremap <Leader>cl :GeminiChatList<CR>                     " List chats
 nnoremap <Leader>ce :GeminiChatEnd<Space>                   " End chat (prompt for ID)
+
+" Configure variables:
+" AI plugins setups
+let g:gemini_default_model = 'gemini-2.5-pro'
+"let g:gemini_api_key_source = 'GEMINI_API_KEY'
+
+let g:gemini_replacements = {
+    \ 'dav': 'fruit',
+    \ 'Dave': 'cloud',
+    \ 'token': 'food'
+    \ }
+
+" Enable timestamps for chat messages
+let g:chat_timestamp_enabled = 1
+
+" Set custom role names
+let g:chat_user_role_name = 'Tom'
+let g:chat_gemini_role_name = 'Teacher'
+let g:gemini_log_use_starttime = 1
+let g:gemini_record_ask_history = 0
+let g:vim_markdown_folding_level = 1
+
+
+
