@@ -102,6 +102,10 @@ scratch buffer*. They do not maintain conversational context.
     **replace the original selection** directly in your buffer. Use with care!
     *Example*: Select a function, then `:'<,'>GeminiReplaceVisual`
 
+*  `:GeminiAskSaveLog`                                  *GeminiAskSaveLog*
+    Save the curent ask log into file. By default stored in:
+    ~/.local/state/vim-gemini-ask/gemini-ask.2025-08-01_20-51-05.log
+
 --- Chat Session Commands ---
 
 These commands allow for multi-turn conversations with Gemini, where the AI
@@ -152,6 +156,10 @@ remembers previous turns in the session.
     Ends and closes the chat session identified by `session_id_prefix`.
     The associated chat buffer will be deleted.
     *Example*: `:GeminiChatEnd 1a2b3c4d`
+
+*  `:GeminiAskSaveChat`                                  *GeminiAskSaveChat*
+    Save the curent chat session into file. By default stored in:
+    ~/.local/state/vim-gemini-ask/gemini-chat.2025-08-01_20-51-05.log
 
 --- Recommended Mappings (add to your `.vimrc`) ---
 The plugin does not provide default mappings to avoid conflicts. You can add
