@@ -1,6 +1,7 @@
 *gemini.txt* A Vim plugin for Google Gemini AI interaction
 
-Author: Your Name <your.email@example.com>
+Author: Chunyu Hu <chuhu@redhat.com>
+Assisted-by: Gemini-2.5-flash
 Version: 0.1
 License: MIT License (see LICENSE)
 
